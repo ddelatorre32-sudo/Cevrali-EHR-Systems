@@ -373,3 +373,78 @@ test('logout invalidates the server session and unknown routes return JSON', asy
   );
   assert.equal((await request('/auth/me')).response.status, 401);
 });
+
+async function isolatedLogins(
+  run: (
+    login: (email: string, password?: string) => Promise<Response>,
+  ) => Promise<void>,
+) {
+  const isolatedServer = createApp(db).listen(0, '127.0.0.1');
+  await new Promise<void>((resolve) => isolatedServer.once('listening', resolve));
+  const address = isolatedServer.address() as AddressInfo;
+  const login = (email: string, password = 'incorrect-synthetic-password') =>
+    fetch(`http://127.0.0.1:${address.port}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+  try {
+    await run(login);
+  } finally {
+    await new Promise<void>((resolve, reject) =>
+      isolatedServer.close((error) => (error ? reject(error) : resolve())),
+    );
+  }
+}
+
+test('login throttles one normalized account without locking out another account sharing its address', async () => {
+  await isolatedLogins(async (login) => {
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const email = attempt % 2 ? ' ALEX@CEVRALI.DEMO ' : 'alex@cevrali.demo';
+      assert.equal((await login(email)).status, 401);
+    }
+    assert.equal(
+      (await login('alex@cevrali.demo', 'CevraliDemo2026!')).status,
+      429,
+    );
+    assert.equal(
+      (await login(' FRONTDESK@CEVRALI.DEMO ', 'CevraliDemo2026!')).status,
+      200,
+    );
+    assert.equal(
+      (await login(' ALEX@CEVRALI.DEMO ', 'CevraliDemo2026!')).status,
+      429,
+    );
+
+    // A successful login clears only that account's earlier failures.
+    for (let attempt = 0; attempt < 9; attempt++)
+      assert.equal((await login('frontdesk@cevrali.demo')).status, 401);
+    assert.equal(
+      (await login('frontdesk@cevrali.demo', 'CevraliDemo2026!')).status,
+      200,
+    );
+    assert.equal((await login(' FRONTDESK@CEVRALI.DEMO ')).status, 401);
+    assert.equal(
+      (await login('frontdesk@cevrali.demo', 'CevraliDemo2026!')).status,
+      200,
+    );
+  });
+});
+
+test('login keeps an address-wide failure limit when emails change or another account signs in', async () => {
+  await isolatedLogins(async (login) => {
+    for (let attempt = 0; attempt < 90; attempt++)
+      assert.equal((await login(`synthetic-${attempt}@example.test`)).status, 401);
+    assert.equal(
+      (await login('frontdesk@cevrali.demo', 'CevraliDemo2026!')).status,
+      200,
+    );
+    for (let attempt = 90; attempt < 100; attempt++)
+      assert.equal((await login(`synthetic-${attempt}@example.test`)).status, 401);
+    assert.equal(
+      (await login('alex@cevrali.demo', 'CevraliDemo2026!')).status,
+      429,
+    );
+    assert.equal((await login('another-account@example.test')).status, 429);
+  });
+});

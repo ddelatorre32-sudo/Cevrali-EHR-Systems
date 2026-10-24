@@ -196,21 +196,34 @@ export function createApp(db: DatabaseSync, account?: AccountContext) {
     db.prepare("SELECT 1").get();
     res.json({ status: "ok", mode: "synthetic-demo" });
   });
+  // A shared proxy address must not let one account's mistakes lock out every
+  // other account. Keep a larger address-wide limit for repeated account cycling.
   const attempts = new Map<string, { count: number; until: number }>();
+  const addressAttempts = new Map<string, { count: number; until: number }>();
   app.post("/api/auth/login", (req, res) => {
     const input = z
       .object({
-        email: z.string().email(),
+        email: z
+          .string()
+          .trim()
+          .email()
+          .transform((value) => value.toLowerCase()),
         password: z.string().min(1).max(200),
       })
       .parse(req.body);
     const ip = req.ip || "local";
-    const attempt = attempts.get(ip);
-    if (attempt && attempt.until > Date.now() && attempt.count >= 10)
+    const key = JSON.stringify([ip, input.email]);
+    const attempt = attempts.get(key);
+    const addressAttempt = addressAttempts.get(ip);
+    const now = Date.now();
+    if (
+      (attempt && attempt.until > now && attempt.count >= 10) ||
+      (addressAttempt && addressAttempt.until > now && addressAttempt.count >= 100)
+    )
       fail(429, "Too many sign-in attempts. Try again in 15 minutes.");
     const user = db
       .prepare("SELECT * FROM users WHERE email = ? AND is_active=1")
-      .get(input.email.toLowerCase()) as Row | undefined;
+      .get(input.email) as Row | undefined;
     const [salt, expected] = String(user?.password || "unrecognized:").split(
       ":",
     );
@@ -220,13 +233,20 @@ export function createApp(db: DatabaseSync, account?: AccountContext) {
       !expected ||
       !timingSafeEqual(actual, Buffer.from(expected, "hex"))
     ) {
-      attempts.set(ip, {
-        count: attempt && attempt.until > Date.now() ? attempt.count + 1 : 1,
-        until: Date.now() + 900000,
+      attempts.set(key, {
+        count: attempt && attempt.until > now ? attempt.count + 1 : 1,
+        until: now + 900000,
+      });
+      addressAttempts.set(ip, {
+        count:
+          addressAttempt && addressAttempt.until > now
+            ? addressAttempt.count + 1
+            : 1,
+        until: now + 900000,
       });
       fail(401, "Email or password is incorrect");
     }
-    attempts.delete(ip);
+    attempts.delete(key);
     const signedIn = startSession(db, user, res, account);
     audit(user as User, "Signed in", "workspace");
     res.json(signedIn);

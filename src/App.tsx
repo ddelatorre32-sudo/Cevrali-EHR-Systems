@@ -362,6 +362,8 @@ function WorkspaceApp() {
   const [user, setUser] = useState<User | null>(null);
   const [workspaceSettings, setWorkspaceSettings] = useState<WorkspaceSettings>(defaultWorkspaceSettings);
   const [authLoading, setAuthLoading] = useState(true);
+  const [authError, setAuthError] = useState("");
+  const [authAttempt, setAuthAttempt] = useState(0);
   const [page, setPage] = useState<Page>(currentPage);
   const [mobileNav, setMobileNav] = useState(false);
   const [overview, setOverview] = useState<Overview | null>(null);
@@ -445,13 +447,35 @@ function WorkspaceApp() {
     return () => window.removeEventListener("hashchange", handler);
   }, []);
   useEffect(() => {
-    api<User>("/auth/me")
-      .then(sessionUser)
-      .catch((e) => {
-        if (e.status !== 401) setError(e.message);
+    let active = true;
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 10000);
+    setAuthLoading(true);
+    setAuthError("");
+    api<User>("/auth/me", { signal: controller.signal })
+      .then((current) => {
+        if (active) sessionUser(current);
       })
-      .finally(() => setAuthLoading(false));
-  }, []);
+      .catch((e) => {
+        if (!active) return;
+        if (e instanceof ApiError && e.status === 401) sessionUser(null);
+        else
+          setAuthError(
+            controller.signal.aborted
+              ? "Cevrali is taking longer than expected to respond. Please retry the connection."
+              : "Your session could not be checked. Please retry the connection.",
+          );
+      })
+      .finally(() => {
+        window.clearTimeout(timeout);
+        if (active) setAuthLoading(false);
+      });
+    return () => {
+      active = false;
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [authAttempt]);
   const settingsIdentity = user ? `${user.practice?.id}:${user.id}:${user.role}:${Boolean(user.is_admin)}` : "";
   useEffect(() => {
     if (!settingsIdentity) return;
@@ -696,6 +720,22 @@ function WorkspaceApp() {
         <Leaf size={36} />
         <span>Preparing your workspace…</span>
       </div>
+    );
+  if (!user && authError)
+    return (
+      <main className="session-privacy-overlay">
+        <section className="session-privacy-card">
+          <Leaf size={32} />
+          <h1>Unable to open Cevrali</h1>
+          <p role="alert">{authError}</p>
+          <button
+            className="button primary"
+            onClick={() => setAuthAttempt((attempt) => attempt + 1)}
+          >
+            Retry connection
+          </button>
+        </section>
+      </main>
     );
   if (!user)
     return (

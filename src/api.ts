@@ -65,6 +65,13 @@ export function assertCurrentSession(version: number) {
       "Your account session changed while this request was processing.",
     );
 }
+function responseError(status: number) {
+  if (status === 401) return "Your session has expired. Please sign in again.";
+  if (status === 403) return "You do not have permission to perform this action.";
+  if (status >= 500)
+    return "Cevrali is temporarily unavailable. Please try again.";
+  return "The server returned an unexpected response. Please try again.";
+}
 export async function api<T>(path: string, options?: RequestInit): Promise<T> {
   if (isStandalonePreview) {
     const { previewApi } = await import("./preview-api");
@@ -91,13 +98,28 @@ export async function api<T>(path: string, options?: RequestInit): Promise<T> {
       ...options?.headers,
     },
   });
-  const data = await res.json();
+  // Hosting gateways can return HTML while the application is restarting.
+  // Keep the HTTP status and show a useful error instead of a JSON parser error.
+  const body = await res.text();
   assertCurrentSession(version);
+  let data: unknown;
+  try {
+    data = JSON.parse(body);
+  } catch {
+    // The error response below deliberately excludes gateway markup.
+  }
   if (!res.ok) {
     if (res.status === 401 && checkContext && expectedUser)
       window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
-    throw new ApiError(res.status, data.error || "Request failed");
+    const message =
+      data && typeof data === "object" && "error" in data &&
+      typeof data.error === "string"
+        ? data.error
+        : responseError(res.status);
+    throw new ApiError(res.status, message);
   }
+  if (data === undefined)
+    throw new ApiError(502, responseError(502));
   if (
     (options?.method || "GET") !== "GET" &&
     (path === "/auth/login" ||
@@ -107,7 +129,7 @@ export async function api<T>(path: string, options?: RequestInit): Promise<T> {
       /^\/accounts\/invitations\/[^/]+\/accept$/.test(path))
   )
     notifyOtherTabs();
-  return data;
+  return data as T;
 }
 export const isStandalonePreview =
   import.meta.env.MODE === "standalone-preview";
