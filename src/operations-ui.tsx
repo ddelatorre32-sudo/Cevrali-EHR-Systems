@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import {
   Bell,
   FileDown,
@@ -1084,10 +1084,12 @@ export function FaxInboxPage({
   patients,
   clinical,
   onChart,
+  initialFaxId,
 }: {
   patients: Patient[];
   clinical: boolean;
   onChart: (id: string) => void;
+  initialFaxId?: string;
 }) {
   const resource = useResource<FaxRow[]>(`${base}/incoming-faxes`, []),
     alerts = useResource<Notice[]>(`${base}/alerts`, []);
@@ -1101,6 +1103,12 @@ export function FaxInboxPage({
     refreshAlerts();
   };
   const action = useAction(reload);
+  const openedSource = useRef('');
+  useEffect(() => {
+    if (!clinical || !initialFaxId || openedSource.current === initialFaxId) return;
+    const fax = resource.data.find(item => item.id === initialFaxId);
+    if (fax) { openedSource.current = initialFaxId; setSelected(fax); }
+  }, [clinical, initialFaxId, resource.data]);
   useEffect(() => {
     const timer = setInterval(() => void reload().catch(() => {}), 15000);
     return () => clearInterval(timer);

@@ -5,6 +5,7 @@ import {
   useState,
   type FormEvent,
 } from 'react';
+import { useWorkSourceFocus } from './work-source-focus';
 import {
   Activity,
   ArrowRight,
@@ -778,13 +779,16 @@ export function TaskBoard({
   patients,
   user,
   onChanged,
+  initialTaskId,
 }: {
   patients: Patient[];
   user: User;
   onChanged: () => Promise<void>;
+  initialTaskId?: string;
 }) {
   const resource = useResource<TaskRow[]>('/workflow/tasks', []);
   const team = useResource<Team[]>('/workflow/team', []);
+  useWorkSourceFocus(resource.data.some(task => task.id === initialTaskId) ? `work-care-${initialTaskId}` : undefined);
   const [filter, setFilter] = useState('Open');
   const [showForm, setShowForm] = useState(false);
   const action = useAction(async () => {
@@ -860,8 +864,10 @@ export function TaskBoard({
       <div className="workflow-list">
         {rows.map((t) => (
           <article
-            className={`assigned-task ${t.done ? 'task-done' : ''}`}
+            className={`assigned-task ${t.done ? 'task-done' : ''} ${t.id === initialTaskId ? 'work-source-focus' : ''}`}
             key={t.id}
+            id={`work-care-${t.id}`}
+            tabIndex={t.id === initialTaskId ? -1 : undefined}
           >
             <button
               className="task-check"

@@ -18,6 +18,7 @@ import {
   CalendarDays,
   Check,
   CheckCheck,
+  ClipboardList,
   ChevronLeft,
   ChevronRight,
   CircleHelp,
@@ -70,6 +71,7 @@ import { TreatmentReconciliationPage } from "./treatment-ui";
 import { ScheduleCalendar, type AppointmentPrefill } from "./schedule-calendar";
 import { ReadinessPage, FaxInboxPage, FaxAlertButton } from "./operations-ui";
 import { StaffCommunicationPage, StaffUnreadBadge } from "./staff-communication-ui";
+import { MyWorkPage } from "./my-work-ui";
 import {
   age,
   AppointmentForm,
@@ -116,6 +118,7 @@ type Page =
   | "account"
   | "settings"
   | "staff"
+  | "my-work"
   | "readiness"
   | "treatments"
   | "fax-inbox"
@@ -132,6 +135,7 @@ const pages: {
     icon: LayoutDashboard,
     section: "WORKSPACE",
   },
+  { id: "my-work", label: "My work", icon: ClipboardList },
   { id: "patients", label: "Patients", icon: UsersRound },
   { id: "schedule", label: "Schedule", icon: CalendarDays },
   { id: "readiness", label: "Pre-visit readiness", icon: CheckCheck },
@@ -160,9 +164,16 @@ const pages: {
   { id: "settings", label: "Settings", icon: Settings2, section: "WORKSPACE SETTINGS" },
 ];
 const currentPage = () =>
-  pages.some((p) => p.id === location.hash.slice(1))
-    ? (location.hash.slice(1) as Page)
+  pages.some((p) => p.id === location.hash.slice(1).split("?")[0])
+    ? (location.hash.slice(1).split("?")[0] as Page)
     : "overview";
+const currentWorkSource = () => {
+  const params = new URLSearchParams(location.hash.split("?")[1] || "");
+  return { sourceId: params.get("source") || undefined,
+    conversationId: params.get("conversation") || undefined,
+    messageId: params.get("message") || undefined,
+    announcementId: params.get("announcement") || undefined };
+};
 const todayDate = () =>
   new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles" }).format(
     new Date(),
@@ -369,6 +380,7 @@ function WorkspaceApp() {
   const [authError, setAuthError] = useState("");
   const [authAttempt, setAuthAttempt] = useState(0);
   const [page, setPage] = useState<Page>(currentPage);
+  const [workSource, setWorkSource] = useState(currentWorkSource);
   const [mobileNav, setMobileNav] = useState(false);
   const [overview, setOverview] = useState<Overview | null>(null);
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -442,11 +454,12 @@ function WorkspaceApp() {
   }
   const navigate = (next: Page) => {
     location.hash = next;
+    setWorkSource({ sourceId: undefined, conversationId: undefined, messageId: undefined, announcementId: undefined });
     setPage(next);
     setMobileNav(false);
   };
   useEffect(() => {
-    const handler = () => setPage(currentPage());
+    const handler = () => { setPage(currentPage()); setWorkSource(currentWorkSource()); };
     window.addEventListener("hashchange", handler);
     return () => window.removeEventListener("hashchange", handler);
   }, []);
@@ -830,6 +843,7 @@ function WorkspaceApp() {
                   "account",
                   "settings",
                   "staff",
+                  "my-work",
                 ].includes(p.id),
             )
             .map((p) => (
@@ -1467,6 +1481,8 @@ function WorkspaceApp() {
                           "Manage practice controls, personal preferences, and reusable note templates.",
                         staff:
                           "Keep your team connected with conversations and practice announcements.",
+                        "my-work":
+                          "Your assignments, reviews, and follow-ups in one place.",
                       }[page]
                     }
                   </p>
@@ -1910,6 +1926,7 @@ function WorkspaceApp() {
                   patients={patients}
                   user={user}
                   onChanged={refresh}
+                  initialTaskId={workSource.sourceId}
                 />
               )}
               {page === "queue" && (
@@ -1926,18 +1943,30 @@ function WorkspaceApp() {
                   patients={patients}
                   clinical={clinical}
                   onChart={openChart}
+                  initialFaxId={workSource.sourceId}
                 />
               )}
-              {page === "orders" && <OrderList patients={patients} />}
+              {page === "orders" && <OrderList patients={patients} initialResultId={workSource.sourceId} />}
               {page === "reminders" && <RemindersPage clinical={clinical} />}
               {page === "insurance" && <InsurancePage patients={patients} />}
               {page === "billing" && <BillingPage patients={patients} />}
               {page === "authorizations" && (
-                <AuthorizationsPage patients={patients} />
+                <AuthorizationsPage patients={patients} initialAuthorizationId={workSource.sourceId} />
               )}
               {page === "metrics" && <MetricsPage />}
               {page === "integrations" && <IntegrationsPage />}
-              {page === "staff" && <StaffCommunicationPage key={settingsIdentity} user={user} />}
+              {page === "my-work" && <MyWorkPage key={settingsIdentity} user={user} onOpenPatient={openChart} onNavigate={(destination, sourceId, messageId) => {
+                const params = new URLSearchParams();
+                if (sourceId) {
+                  if (destination === "staff") params.set(sourceId.startsWith("announcement:") ? "announcement" : "conversation", sourceId.startsWith("announcement:") ? sourceId.slice("announcement:".length) : sourceId);
+                  else params.set("source", sourceId);
+                }
+                if (messageId && destination === "staff") params.set("message", messageId);
+                location.hash = destination + (params.size ? `?${params}` : "");
+                setPage(destination); setMobileNav(false);
+                setWorkSource({ sourceId: params.get("source") || undefined, conversationId: params.get("conversation") || undefined, messageId: params.get("message") || undefined, announcementId: params.get("announcement") || undefined });
+              }} />}
+              {page === "staff" && <StaffCommunicationPage key={settingsIdentity} user={user} initialConversationId={workSource.conversationId} initialMessageId={workSource.messageId} initialAnnouncementId={workSource.announcementId} />}
               {page === "settings" && <SettingsPage key={settingsIdentity} user={user} onUserChanged={sessionUser} onSettingsChanged={setWorkspaceSettings} />}
               {page === "account" && (
                 <AccountPage

@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { staffTaskRequest } from "./staff-task-engine.js";
+import { myWorkRequest } from "./my-work-engine.js";
 import { emptyStaffCommunicationState, staffCommunicationRequest } from "./staff-communication.js";
 import type { StaffCommunicationState } from "./staff-communication-model.js";
 import { templateLibraryRequest } from "./template-library.js";
@@ -551,6 +553,10 @@ export function workflowRequest(
   normalizeAppointmentStatuses(state, ctx.appointments);
   const url = new URL(path, "https://workflows.invalid");
   const [resource, id, command] = url.pathname.split("/").filter(Boolean);
+  if (resource === "staff-tasks")
+    return staffTaskRequest(state.staff_communication, ctx, method, url, body);
+  if (resource === "my-work")
+    return myWorkRequest(state, ctx, method, url, body);
   if (resource === "staff")
     return staffCommunicationRequest(state.staff_communication, ctx, method, url, body);
   if (resource === "patient-profiles")

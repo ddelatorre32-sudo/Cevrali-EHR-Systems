@@ -37,7 +37,7 @@ function PersonalSettings({ user, onSaved }: { user: User; onSaved: (settings: W
         <div className="account-field-grid">
           <label>Start page
             <select value={draft.start_page} onChange={e => { setDraft({ ...draft, start_page: e.target.value as WorkspaceSettings["start_page"] }); setMessage(""); }}>
-              <option value="overview">Overview</option><option value="patients">Patients</option><option value="schedule">Schedule</option><option value="queue">Patient queue</option><option value="staff">Staff communication</option>
+              <option value="overview">Overview</option><option value="patients">Patients</option><option value="schedule">Schedule</option><option value="queue">Patient queue</option><option value="staff">Staff communication</option><option value="my-work">My work</option>
             </select>
           </label>
           <label>Default calendar view

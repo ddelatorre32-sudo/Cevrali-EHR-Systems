@@ -105,6 +105,14 @@ Practice administrators can create and archive team channels and publish normal 
 
 Messages, read positions, announcements, and acknowledgements persist in the practice database. Retrying the same message submission does not create a duplicate. This is internal application messaging; there is no Connecteam account connection, external SMS/email delivery, push notification service, or attachment upload. Staff can choose Staff communication as their start page under **Settings → Personal preferences**. The standalone preview supports the same workflows in page memory.
 
+### My work and message assignments
+
+Choose **Create task** on a staff message to turn it into an assigned follow-up with a title, owner, due date, and priority. The task retains its original message, completion history, and assignment revisions. A direct-message task stays within its participants; channel tasks can be assigned to active practice staff. The task creator, assignee, or an administrator with access to the source conversation can update it. Completed tasks must be reopened before changing their details. Retrying a conversion cannot create another task for the same message.
+
+**My work** brings together tasks assigned to you, tasks you assigned to others, overdue work, unread conversations, announcements needing acknowledgement, and your due authorization follow-ups. Clinical staff also see their care tasks and results or outside documents awaiting review. A pending report appears once, using its actual review status rather than the completion flag on a general task. Front-desk views omit clinical work. Source buttons open the matching conversation, result, received document, or authorization without recording a review automatically.
+
+The dashboard refreshes every 15 seconds and on returning focus. **Settings → Personal preferences → Start page → My work** makes it the first screen after sign-in. The connected application saves assignments and history in the practice database; offline demo changes remain in page memory.
+
 ### Calendar scheduling and registration while booking
 
 **Schedule** opens a weekly time calendar, with **Day**, **Week**, **Month**, and **List** views. Use the previous/next arrows, **Today**, or the date picker to navigate. Filter by provider and use the existing All appointments / Upcoming / Completed filters. Appointment colors identify status, with text labels and a legend. The selected day's appointment list remains below the calendar for check-in, starting/continuing care, completion, visit insurance changes, and cancellation.

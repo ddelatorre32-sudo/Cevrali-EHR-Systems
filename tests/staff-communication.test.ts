@@ -244,6 +244,14 @@ test("conversation history is bounded and searchable without dropping chronologi
   const found = await call(messagesPath(conversation.id) + "?q=nEeDlE", "GET", undefined, deskCookie);
   assert.equal(found.data.messages.length, 1);
   assert.equal(found.data.messages[0].sequence, 12);
+  const focused = await call(messagesPath(conversation.id) + "?focus=" + found.data.messages[0].id,
+    "GET", undefined, deskCookie);
+  assert.equal(focused.status, 200);
+  assert.equal(focused.data.messages.at(-1).sequence, 12);
+  assert.equal(focused.data.latest_sequence, 12);
+  assert.equal(focused.data.has_later, true);
+  assert.equal((await call(messagesPath(conversation.id) + "?focus=missing-source-message")).status, 404);
+  assert.equal((await call(messagesPath(conversation.id) + "?focus=" + found.data.messages[0].id + "&q=Needle")).status, 400);
   assert.equal((await workspace(deskCookie)).conversations.find((c: any) => c.id === conversation.id).unread_count, 55);
   for (const query of ["?limit=0", "?limit=101", "?before=-1"])
     assert.equal((await call(messagesPath(conversation.id) + query)).status, 400);

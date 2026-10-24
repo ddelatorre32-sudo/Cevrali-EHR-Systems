@@ -1,4 +1,5 @@
 import { clinicTimestampLabel } from "./clinic-dates";
+import { useWorkSourceFocus } from "./work-source-focus";
 import { useState, type FormEvent } from "react";
 import { Plus, ShieldCheck } from "lucide-react";
 import { Badge, Empty, Modal, fullName, prettyDate } from "./components";
@@ -408,9 +409,11 @@ function DecisionForm({
 export function AuthorizationsPage({
   patients,
   patient,
+  initialAuthorizationId,
 }: {
   patients: Patient[];
   patient?: Patient;
+  initialAuthorizationId?: string;
 }) {
   const currentUser = useResource<User | null>("/auth/me", null);
   const resource = useResource<AuthorizationRow[]>(
@@ -423,6 +426,7 @@ export function AuthorizationsPage({
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  useWorkSourceFocus(resource.data.some(authorization => authorization.id === initialAuthorizationId) ? `work-authorization-${initialAuthorizationId}` : undefined);
   async function run(fn: () => Promise<unknown>, success: string) {
     setBusy(true);
     setError("");
@@ -506,7 +510,7 @@ export function AuthorizationsPage({
         </div>
         <div className="finance-cards">
           {rows.map((a) => (
-            <article className="finance-card" key={a.id}>
+            <article className={`finance-card ${a.id === initialAuthorizationId ? "work-source-focus" : ""}`} key={a.id} id={`work-authorization-${a.id}`} tabIndex={a.id === initialAuthorizationId ? -1 : undefined}>
               <div className="finance-card-header">
                 <div>
                   <h3>{fullName(a)}</h3>

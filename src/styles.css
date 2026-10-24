@@ -5373,6 +5373,7 @@ textarea {
 .new-patient-action {
   white-space: nowrap;
 }
+.work-source-focus { outline: 2px solid #9ab38c; outline-offset: 4px; scroll-margin-top: 90px; }
 @media (max-width: 600px) {
   .topbar-actions .staff-communication-shortcut {
     display: none;

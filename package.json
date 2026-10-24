@@ -13,7 +13,7 @@
     "build": "tsc --noEmit && tsc -p tsconfig.server.json && node scripts/copy-rfa-assets.mjs && vite build",
     "build:preview": "node --import tsx scripts/build-preview.mjs",
     "start": "node dist-server/index.js",
-    "test": "node --import tsx --test tests/api.test.ts tests/workflows.test.ts tests/finance.test.ts tests/accounts.test.ts tests/patient-accounts.test.ts tests/rfa.test.ts tests/operations.test.ts tests/scheduling.test.ts tests/schedule-workflows.test.ts tests/treatment.test.ts tests/note-addenda.test.ts tests/fax-ocr.test.ts tests/clinic-dates.test.ts tests/note-result-integrity.test.ts tests/session-context.test.ts tests/booking-conflicts.test.ts tests/settings.test.ts tests/template-library.test.ts tests/patient-demographics.test.ts tests/patient-profile.test.ts tests/staff-communication.test.ts",
+    "test": "node --import tsx --test tests/api.test.ts tests/workflows.test.ts tests/finance.test.ts tests/accounts.test.ts tests/patient-accounts.test.ts tests/rfa.test.ts tests/operations.test.ts tests/scheduling.test.ts tests/schedule-workflows.test.ts tests/treatment.test.ts tests/note-addenda.test.ts tests/fax-ocr.test.ts tests/clinic-dates.test.ts tests/note-result-integrity.test.ts tests/session-context.test.ts tests/booking-conflicts.test.ts tests/settings.test.ts tests/template-library.test.ts tests/patient-demographics.test.ts tests/patient-profile.test.ts tests/staff-communication.test.ts tests/my-work.test.ts",
     "test:e2e": "playwright test",
     "test:preview": "npm run build:preview && node --import tsx --test tests/preview.test.mjs",
     "smoke": "node scripts/smoke.mjs"

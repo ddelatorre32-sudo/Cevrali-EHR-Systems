@@ -54,6 +54,11 @@ try {
         data.conversations.some((conversation) => conversation.id === "staff-general") &&
         typeof data.unread_messages === "number",
     ],
+    [
+      "/workflow/my-work",
+      (data) => Array.isArray(data.staff_tasks) && Array.isArray(data.reviews) &&
+        typeof data.counts?.assigned_tasks === "number" && /^\d{4}-\d{2}-\d{2}$/.test(data.today),
+    ],
     ["/workflow/metrics", (data) => typeof data.measured_visits === "number"],
     ["/workflow/finance/policies", (data) => Array.isArray(data)],
     [

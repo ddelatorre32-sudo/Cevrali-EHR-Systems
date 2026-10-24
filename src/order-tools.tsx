@@ -1,4 +1,5 @@
 import { clinicDate } from "./clinic-dates";
+import { useWorkSourceFocus } from "./work-source-focus";
 import { useState, type FormEvent } from "react";
 import { VisitFinanceContext } from "./finance-ui";
 import {
@@ -339,10 +340,12 @@ export function OrderList({
   patientId,
   patients,
   encounterId,
+  initialResultId,
 }: {
   patientId?: string;
   patients: Patient[];
   encounterId?: string;
+  initialResultId?: string;
 }) {
   const resource = useResource<Order[]>(
     `/workflow/orders${patientId ? `?patient_id=${patientId}` : ""}`,
@@ -351,6 +354,7 @@ export function OrderList({
   const results = useResource<
     (Lab & { order_id?: string; reviewed_at?: string })[]
   >("/labs", []);
+  useWorkSourceFocus(results.data.some(result => result.id === initialResultId) && resource.data.some(order => results.data.some(result => result.id === initialResultId && result.order_id === order.id)) ? `work-result-${initialResultId}` : undefined);
   const [showCreate, setShowCreate] = useState(false);
   const [selected, setSelected] = useState<Order | null>(null);
   const [error, setError] = useState("");
@@ -482,7 +486,7 @@ export function OrderList({
             {results.data
               .filter((r) => r.order_id === order.id)
               .map((result) => (
-                <div className="matched-result" key={result.id}>
+                <div className={`matched-result ${result.id === initialResultId ? "work-source-focus" : ""}`} key={result.id} id={`work-result-${result.id}`} tabIndex={result.id === initialResultId ? -1 : undefined}>
                   <strong>
                     {result.name}: {result.value} {result.unit}
                   </strong>

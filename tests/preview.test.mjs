@@ -24,6 +24,7 @@ import { exerciseSettings } from "./settings-browser.ts";
 import { exerciseRegistrationDetails } from "./registration-details-browser.ts";
 import { exercisePatientProfile } from "./patient-profile-browser.ts";
 import { exerciseStaffCommunication } from "./staff-communication-browser.ts";
+import { exerciseMyWork } from "./my-work-browser.ts";
 
 let browser;
 const html = readFileSync(resolve("preview/cevrali-preview.html"), "utf8");
@@ -39,6 +40,7 @@ after(async () => {
   await browser?.close();
 });
 for (const [name, exercise] of [
+  ["message assignments and personal My work follow-ups", exerciseMyWork],
   ["staff channels, direct messages, and acknowledged announcements", exerciseStaffCommunication],
   ["patient profile edits and detailed allergy review", exercisePatientProfile],
   ["structured address and searchable patient allergies", exerciseRegistrationDetails],

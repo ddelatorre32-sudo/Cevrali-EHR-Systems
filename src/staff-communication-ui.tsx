@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { Archive, Check, CheckCheck, Hash, Megaphone, MessageCircle, Plus, RefreshCw, Search, Send, UsersRound } from "lucide-react";
+import { Archive, Check, CheckCheck, ClipboardCheck, Hash, Megaphone, MessageCircle, Plus, RefreshCw, Search, Send, UsersRound } from "lucide-react";
 import { api, patch, post } from "./api";
 import { Modal } from "./components";
+import { CreateMessageTaskDialog, StaffTaskDialog } from "./staff-task-ui";
+import type { StaffTaskSummary, StaffTaskView } from "../server/staff-task-model";
 import type { User } from "./types";
 import type {
   StaffAnnouncementView, StaffConversationView, StaffMessagePage,
@@ -57,14 +59,26 @@ export function StaffUnreadBadge() {
 type Draft = { text: string; clientId: string };
 type Tab = "messages" | "announcements" | "directory";
 
-export function StaffCommunicationPage({ user }: { user: User }) {
+export function StaffCommunicationPage({ user, initialConversationId, initialMessageId, initialAnnouncementId }: {
+  user: User;
+  initialConversationId?: string;
+  initialMessageId?: string;
+  initialAnnouncementId?: string;
+}) {
   const [workspace, setWorkspace] = useState<StaffWorkspace | null>(null);
   const workspaceRef = useRef<StaffWorkspace | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [tab, setTab] = useState<Tab>("messages");
-  const [selectedId, setSelectedId] = useState("");
+  const [tab, setTab] = useState<Tab>(initialAnnouncementId ? "announcements" : "messages");
+  const [selectedId, setSelectedId] = useState(initialConversationId || "");
+  const [messageFocus, setMessageFocus] = useState({ conversationId: initialConversationId || "", messageId: initialMessageId || "" });
+  const [taskSource, setTaskSource] = useState<{ message: StaffMessageView; conversation: StaffConversationView } | null>(null);
+  const [taskId, setTaskId] = useState<string | null>(null);
+  const [messageTasks, setMessageTasks] = useState<Record<string, StaffTaskSummary>>({});
+  const focusedAnnouncement = useRef("");
+  const requestedConversation = useRef(initialConversationId || "");
+  requestedConversation.current = initialConversationId || "";
   const [modal, setModal] = useState<"channel" | "announcement" | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [announcementArchived, setAnnouncementArchived] = useState(false);
@@ -85,7 +99,8 @@ export function StaffCommunicationPage({ user }: { user: User }) {
     workspaceRef.current = next;
     setWorkspace(next);
     setSelectedId(selected => next.conversations.some(conversation => conversation.id === selected)
-      ? selected : next.conversations.find(conversation => !conversation.archived)?.id || "");
+      ? selected : requestedConversation.current && !next.conversations.some(conversation => conversation.id === requestedConversation.current)
+        ? "" : next.conversations.find(conversation => !conversation.archived)?.id || "");
   }, []);
   const reload = useCallback(async () => {
     const request = ++loadSequence.current;
@@ -94,7 +109,8 @@ export function StaffCommunicationPage({ user }: { user: User }) {
       const next = await api<StaffWorkspace>(base);
       if (!alive.current || request !== loadSequence.current) return;
       rememberWorkspace(next);
-      setError("");
+      setError(requestedConversation.current && !next.conversations.some(conversation => conversation.id === requestedConversation.current)
+        ? "This source conversation is no longer available to your account." : "");
     } catch (cause) {
       if (alive.current && request === loadSequence.current) setError(errorMessage(cause));
     } finally {
@@ -117,6 +133,33 @@ export function StaffCommunicationPage({ user }: { user: User }) {
       window.removeEventListener(updatedEvent, refresh);
     };
   }, [reload]);
+  useEffect(() => {
+    if (initialAnnouncementId) setTab("announcements");
+    else if (initialConversationId) {
+      setSelectedId(initialConversationId); setTab("messages");
+      setMessageFocus({ conversationId: initialConversationId, messageId: initialMessageId || "" });
+    }
+  }, [initialConversationId, initialMessageId, initialAnnouncementId]);
+  useEffect(() => {
+    if (!initialAnnouncementId || tab !== "announcements" || !workspace || focusedAnnouncement.current === initialAnnouncementId) return;
+    const frame = window.requestAnimationFrame(() => {
+      const target = [...document.querySelectorAll<HTMLElement>("[data-staff-announcement-id]")]
+        .find(element => element.dataset.staffAnnouncementId === initialAnnouncementId);
+      if (target) { target.scrollIntoView({ block: "center" }); focusedAnnouncement.current = initialAnnouncementId; }
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [initialAnnouncementId, tab, workspace]);
+
+  function rememberTask(task: StaffTaskView) {
+    setMessageTasks(current => ({ ...current, [task.message_id]: {
+      id: task.id, title: task.title, owner_id: task.owner_id, owner_name: task.owner.name,
+      due_date: task.due_date, priority: task.priority, done: task.done, revision: task.revision,
+    } }));
+  }
+  function openTaskConversation(conversationId: string, messageId?: string) {
+    setTaskId(null); setSelectedId(conversationId); setTab("messages");
+    setMessageFocus({ conversationId, messageId: messageId || "" });
+  }
 
   function rememberConversation(conversation: StaffConversationView) {
     const current = workspaceRef.current;
@@ -246,7 +289,9 @@ export function StaffCommunicationPage({ user }: { user: User }) {
         <button className="staff-directory-link" onClick={() => setTab("directory")}><UsersRound size={15} />Find a teammate</button>
         <label className="staff-checkbox"><input type="checkbox" checked={showArchived} onChange={event => setShowArchived(event.target.checked)} />Show archived channels</label>
       </aside>
-      {selected ? <Conversation key={selected.id} conversation={selected} user={user} canManage={workspace.can_manage}
+      {selected ? <Conversation key={`${selected.id}:${messageFocus.conversationId === selected.id ? messageFocus.messageId : ""}`} conversation={selected} user={user} canManage={workspace.can_manage}
+        initialMessageId={messageFocus.conversationId === selected.id ? messageFocus.messageId : undefined}
+        messageTasks={messageTasks} onCreateTask={(message, conversation) => setTaskSource({ message, conversation })} onViewTask={setTaskId}
         draft={drafts[selected.id]?.text || ""} onDraft={text => changeDraft(selected.id, text)}
         onSend={() => void sendMessage(selected.id)} sending={Boolean(sending[selected.id])}
         sendError={sendErrors[selected.id] || ""} confirmedMessages={sentMessages[selected.id] || []}
@@ -262,7 +307,7 @@ export function StaffCommunicationPage({ user }: { user: User }) {
       <div className="staff-section-heading"><div><h2>Practice announcements</h2><p>Keep important updates visible and acknowledge the ones that need your attention.</p></div>{workspace.can_manage && <button className="button primary small" onClick={() => setModal("announcement")}><Plus size={15} />New announcement</button>}</div>
       <div className="staff-announcement-filters"><label className="staff-search"><Search size={16} /><input type="search" aria-label="Search announcements" placeholder="Search announcements" value={announcementQuery} onChange={event => setAnnouncementQuery(event.target.value)} /></label>{workspace.can_manage && <label className="staff-checkbox"><input type="checkbox" checked={announcementArchived} onChange={event => setAnnouncementArchived(event.target.checked)} />Show archived announcements</label>}</div>
       {!announcements.length && <div className="staff-empty-state"><Megaphone size={30} /><h3>{announcementQuery ? "No matching announcements" : "A clear place for important updates"}</h3><p>{announcementQuery ? "Try another search." : workspace.can_manage ? "Post your first practice announcement for the team." : "Practice announcements will appear here."}</p></div>}
-      <div className="staff-announcement-list">{announcements.map(announcement => <article key={announcement.id} className={`staff-announcement ${announcement.priority === "Urgent" ? "staff-announcement-urgent" : ""}`} aria-label={`Announcement: ${announcement.title}`}>
+      <div className="staff-announcement-list">{announcements.map(announcement => <article key={announcement.id} data-staff-announcement-id={announcement.id} className={`staff-announcement ${announcement.priority === "Urgent" ? "staff-announcement-urgent" : ""} ${announcement.id === initialAnnouncementId ? "staff-source-highlight" : ""}`} aria-label={`Announcement: ${announcement.title}`}>
         <div className="staff-announcement-top"><span className={`staff-priority ${announcement.priority.toLowerCase()}`}>{announcement.priority === "Urgent" ? "Urgent update" : "Practice update"}</span>{announcement.archived && <span className="staff-archived">Archived</span>}{announcement.needs_acknowledgement && !announcement.archived && <span className="staff-ack-needed">Acknowledgement needed</span>}</div>
         <h3>{announcement.title}</h3><p className="staff-announcement-byline">{announcement.author.name}<span>·</span><time dateTime={announcement.created_at}>{timestamp(announcement.created_at)} PT</time></p>
         <p className="staff-announcement-body">{announcement.body}</p>
@@ -278,13 +323,19 @@ export function StaffCommunicationPage({ user }: { user: User }) {
     </section>}
     {modal === "channel" && <ChannelComposer onClose={() => setModal(null)} onCreated={conversation => { rememberConversation(conversation); setSelectedId(conversation.id); setTab("messages"); setModal(null); setNotice("Channel created"); notifyUpdated(); }} />}
     {modal === "announcement" && <AnnouncementComposer onClose={() => setModal(null)} onCreated={announcement => { rememberAnnouncement(announcement); setModal(null); setTab("announcements"); setNotice("Announcement posted"); notifyUpdated(); }} />}
+    {taskSource && <CreateMessageTaskDialog message={taskSource.message} conversation={taskSource.conversation} user={user} directory={workspace?.directory || []} onClose={() => setTaskSource(null)} onCreated={task => { rememberTask(task); setTaskSource(null); setNotice("Staff task created"); }} />}
+    {taskId && <StaffTaskDialog key={taskId} taskId={taskId} onClose={() => setTaskId(null)} onChanged={rememberTask} onOpenConversation={openTaskConversation} />}
   </div>;
 }
 
-function Conversation({ conversation, user, canManage, draft, onDraft, onSend, sending, sendError, confirmedMessages, onSynchronized, onArchive, actionBusy }: {
+function Conversation({ conversation, user, canManage, draft, onDraft, onSend, sending, sendError, confirmedMessages, onSynchronized, onArchive, actionBusy, initialMessageId, messageTasks, onCreateTask, onViewTask }: {
   conversation: StaffConversationView; user: User; canManage: boolean;
   draft: string; onDraft: (text: string) => void; onSend: () => void; sending: boolean;
   sendError: string; confirmedMessages: StaffMessageView[]; onSynchronized: (latest: number) => void; onArchive: () => void; actionBusy: boolean;
+  initialMessageId?: string;
+  messageTasks: Record<string, StaffTaskSummary>;
+  onCreateTask: (message: StaffMessageView, conversation: StaffConversationView) => void;
+  onViewTask: (id: string) => void;
 }) {
   const [messages, setMessages] = useState<StaffMessageView[]>([]);
   const messagesRef = useRef<StaffMessageView[]>([]);
@@ -298,6 +349,8 @@ function Conversation({ conversation, user, canManage, draft, onDraft, onSend, s
   const [atBottom, setAtBottom] = useState(true);
   const [hasLatestGap, setHasLatestGap] = useState(false);
   const [details, setDetails] = useState(conversation);
+  const [focusedMessageId, setFocusedMessageId] = useState(initialMessageId || "");
+  const focusMessage = useRef(initialMessageId || "");
   const readCursor = useRef(0);
   const readPending = useRef(0);
   const active = useRef(true);
@@ -307,7 +360,7 @@ function Conversation({ conversation, user, canManage, draft, onDraft, onSend, s
   const historyElement = useRef<HTMLDivElement>(null);
   const nearBottom = useRef(true);
   const latestGap = useRef(false);
-  const scrollPlan = useRef<{ kind: "latest" | "top" | "preserve"; height?: number; top?: number } | null>(null);
+  const scrollPlan = useRef<{ kind: "latest" | "top" | "preserve" | "focus"; height?: number; top?: number } | null>(null);
   const synchronized = useRef(onSynchronized);
   synchronized.current = onSynchronized;
   const { id } = conversation;
@@ -331,6 +384,7 @@ function Conversation({ conversation, user, canManage, draft, onDraft, onSend, s
     const search = new URLSearchParams({ limit: "50" });
     if (query) search.set("q", query);
     if (older && messagesRef.current.length) search.set("before", String(messagesRef.current[0].sequence));
+    else if (!query && focusMessage.current) search.set("focus", focusMessage.current);
     try {
       const page = await api<StaffMessagePage>(`${base}/conversations/${id}/messages?${search}`);
       if (!active.current || request !== sequence.current) return;
@@ -345,9 +399,12 @@ function Conversation({ conversation, user, canManage, draft, onDraft, onSend, s
         return;
       }
       if (reset || hasGap) { latestGap.current = false; setHasLatestGap(false); }
+      if (!older && !query && focusMessage.current && page.has_later) {
+        latestGap.current = true; setHasLatestGap(true);
+      }
       const combined = reset || hasGap ? page.messages : mergedMessages(previous, page.messages);
       if (older) scrollPlan.current = { kind: "preserve", height: previousHeight, top: previousTop };
-      else if (reset || hasGap) scrollPlan.current = { kind: query ? "top" : "latest" };
+      else if (reset || hasGap) scrollPlan.current = { kind: query ? "top" : focusMessage.current ? "focus" : "latest" };
       else if (!query && nearBottom.current) scrollPlan.current = { kind: "latest" };
       messagesRef.current = combined; setMessages(combined);
       if (older) historyLoaded.current = true;
@@ -409,7 +466,11 @@ function Conversation({ conversation, user, canManage, draft, onDraft, onSend, s
     const element = historyElement.current;
     const plan = scrollPlan.current;
     if (element && plan) {
-      if (plan.kind === "latest") element.scrollTop = element.scrollHeight;
+      if (plan.kind === "focus") {
+        const target = [...element.querySelectorAll<HTMLElement>("[data-message-id]")]
+          .find(message => message.dataset.messageId === focusMessage.current);
+        if (target) element.scrollTop = target.offsetTop - element.offsetTop - element.clientHeight / 3;
+      } else if (plan.kind === "latest") element.scrollTop = element.scrollHeight;
       else if (plan.kind === "top") element.scrollTop = 0;
       else element.scrollTop = (plan.top || 0) + element.scrollHeight - (plan.height || 0);
       scrollPlan.current = null;
@@ -426,9 +487,22 @@ function Conversation({ conversation, user, canManage, draft, onDraft, onSend, s
       {hasMore && <button className="staff-load-earlier" disabled={loading} onClick={() => void load(true)}>{loading ? "Loading messages…" : "Load earlier messages"}</button>}
       {query && <p className="staff-search-result-note">Search results for “{query}”</p>}
       {loading && !visibleMessages.length ? <p className="staff-history-loading" role="status">Loading messages…</p> : !visibleMessages.length && <div className="staff-empty-state"><MessageCircle size={30} /><h3>{query ? "No matching messages" : "Start the conversation"}</h3><p>{query ? "Try another search in this conversation." : details.can_post ? "Share an update or ask your team a question." : "There are no messages in this conversation."}</p></div>}
-      {visibleMessages.map(message => <article className={`staff-message ${message.author.id === user.id ? "own" : ""}`} key={message.id} data-message-sequence={message.sequence} aria-label={`Message from ${message.author.name}`}><span className="staff-message-avatar">{initials(message.author.name)}</span><div className="staff-message-content"><div className="staff-message-meta"><strong>{message.author.name}</strong><span>{roleName(message.author.role)}</span><time dateTime={message.created_at}>{timestamp(message.created_at)} PT</time></div><p>{message.text}</p></div></article>)}
+      {visibleMessages.map(message => {
+        const task = messageTasks[message.id] || message.task;
+        return <article className={`staff-message ${message.author.id === user.id ? "own" : ""} ${focusedMessageId === message.id ? "staff-source-highlight" : ""}`} key={message.id} data-message-id={message.id} data-message-sequence={message.sequence} aria-label={`Message from ${message.author.name}`}>
+          <span className="staff-message-avatar">{initials(message.author.name)}</span>
+          <div className="staff-message-content"><div className="staff-message-meta"><strong>{message.author.name}</strong><span>{roleName(message.author.role)}</span><time dateTime={message.created_at}>{timestamp(message.created_at)} PT</time></div><p>{message.text}</p>
+            <div className="staff-message-task-actions">
+              <button type="button" className="staff-message-task-button" disabled={!task && !details.can_post} onClick={() => task ? onViewTask(task.id) : onCreateTask(message, details)}><ClipboardCheck size={13} />{task ? "View task" : "Create task"}</button>
+              {task && <span className="staff-message-task-state">{task.done ? "Completed" : `Assigned to ${task.owner_name}`}</span>}
+            </div>
+          </div>
+        </article>;
+      })}
     </div>
-    {!query && (!atBottom || hasLatestGap) && <button className="staff-jump-latest" onClick={() => {
+    {!query && (!atBottom || hasLatestGap || Boolean(focusedMessageId && error)) && <button className="staff-jump-latest" onClick={() => {
+      focusMessage.current = ""; setFocusedMessageId("");
+      latestGap.current = false; setHasLatestGap(false);
       const element = historyElement.current;
       if (element) element.scrollTop = element.scrollHeight;
       measureHistory();

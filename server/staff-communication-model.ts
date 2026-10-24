@@ -1,3 +1,5 @@
+import type { StaffActionTask, StaffTaskSummary } from "./staff-task-model.js";
+
 export type StaffPerson = {
   id: string;
   name: string;
@@ -30,6 +32,7 @@ export type StaffMessage = {
 
 export type StaffMessageView = Omit<StaffMessage, "client_id" | "author_id"> & {
   author: StaffPerson;
+  task?: StaffTaskSummary;
 };
 
 export type StaffConversationView = StaffConversation & {
@@ -69,6 +72,7 @@ export type StaffCommunicationState = {
   messages: StaffMessage[];
   read_cursors: Record<string, Record<string, number>>;
   announcements: StaffAnnouncement[];
+  action_tasks: StaffActionTask[];
 };
 
 export type StaffUnread = {
@@ -91,4 +95,5 @@ export type StaffMessagePage = {
   has_more: boolean;
   oldest_sequence: number | null;
   latest_sequence: number;
+  has_later?: boolean;
 };

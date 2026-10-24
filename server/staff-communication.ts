@@ -91,9 +91,14 @@ function getConversation(
   return conversation;
 }
 
-function messageView(message: StaffMessage, ctx: WorkflowContext): StaffMessageView {
+function messageView(message: StaffMessage, ctx: WorkflowContext, state: StaffCommunicationState): StaffMessageView {
   const { author_id, client_id: _clientId, ...visible } = message;
-  return { ...visible, author: person(ctx, author_id) };
+  const task = state.action_tasks?.find((item) => item.message_id === message.id && item.conversation_id === message.conversation_id);
+  return { ...visible, author: person(ctx, author_id), ...(task ? { task: {
+    id: task.id, title: task.title, owner_id: task.owner_id,
+    owner_name: person(ctx, task.owner_id).name, due_date: task.due_date,
+    priority: task.priority, done: task.done, revision: task.revision,
+  } } : {}) };
 }
 
 function conversationMessages(state: StaffCommunicationState, id: string) {
@@ -128,7 +133,7 @@ function conversationView(
       ? person(ctx, conversation.member_ids.find((id) => id !== ctx.user.id) || "").name
       : conversation.name,
     unread_count: unreadCount(state, ctx, conversation),
-    last_message: last ? messageView(last, ctx) : null,
+    last_message: last ? messageView(last, ctx, state) : null,
     can_post: canPost(conversation, ctx),
   };
 }
@@ -199,7 +204,7 @@ function ensureUniqueChannelName(
 }
 
 export function emptyStaffCommunicationState(): StaffCommunicationState {
-  return { conversations: [], messages: [], read_cursors: {}, announcements: [] };
+  return { conversations: [], messages: [], read_cursors: {}, announcements: [], action_tasks: [] };
 }
 
 export function staffCommunicationRequest(
@@ -312,23 +317,32 @@ export function staffCommunicationRequest(
         before: z.coerce.number().int().positive().optional(),
         limit: z.coerce.number().int().min(1).max(100).default(50),
         q: z.string().trim().max(100).default(""),
+        focus: z.string().trim().min(1).max(160).optional(),
       }).parse({
         before: url.searchParams.get("before") ?? undefined,
         limit: url.searchParams.get("limit") ?? undefined,
         q: url.searchParams.get("q") ?? undefined,
+        focus: url.searchParams.get("focus") ?? undefined,
       });
+      if (query.focus && (query.before !== undefined || query.q))
+        fail(400, "Choose a source message or a search/history page");
+      const allMessages = conversationMessages(state, conversation.id);
+      const focused = query.focus ? allMessages.find((message) => message.id === query.focus) : undefined;
+      if (query.focus && !focused) fail(404, "Staff message not found in this conversation");
       const needle = query.q.toLowerCase();
-      const matching = conversationMessages(state, conversation.id)
+      const matching = allMessages
         .filter((message) => (query.before === undefined || message.sequence < query.before) &&
+          (!focused || message.sequence <= focused.sequence) &&
           (!needle || message.text.toLowerCase().includes(needle)))
         .sort((a, b) => a.sequence - b.sequence);
       const selected = matching.slice(-query.limit);
       const page: StaffMessagePage = {
         conversation: conversationView(state, ctx, conversation),
-        messages: selected.map((message) => messageView(message, ctx)),
+        messages: selected.map((message) => messageView(message, ctx, state)),
         has_more: matching.length > selected.length,
         oldest_sequence: selected[0]?.sequence ?? null,
         latest_sequence: selected.at(-1)?.sequence ?? 0,
+        ...(focused ? { has_later: allMessages.some((message) => message.sequence > focused.sequence) } : {}),
       };
       return page;
     }
@@ -343,7 +357,7 @@ export function staffCommunicationRequest(
       if (previous) {
         if (previous.text !== input.text)
           fail(409, "This message request was already used with different text");
-        return messageView(previous, ctx);
+        return messageView(previous, ctx, state);
       }
       if (!canPost(conversation, ctx))
         fail(409, conversation.archived
@@ -362,7 +376,7 @@ export function staffCommunicationRequest(
       };
       state.messages.push(message);
       ctx.audit("Sent staff message", message.id);
-      return messageView(message, ctx);
+      return messageView(message, ctx, state);
     }
     if (action === "read" && method === "PATCH") {
       const input = z.object({ sequence: z.number().int().nonnegative() }).strict().parse(body);
