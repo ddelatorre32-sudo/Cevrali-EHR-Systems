@@ -1,0 +1,22 @@
+# Local container validation. Public hosting uses HTTPS and COOKIE_SECURE=true.
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 30s
+    environment:
+      NODE_ENV: production
+      PORT: "8080"
+      COOKIE_SECURE: "false"
+      DATABASE_PATH: /var/lib/cevrali/cevrali.sqlite
+      ACCOUNTS_PATH: /var/lib/cevrali/accounts
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - cevrali-data:/var/lib/cevrali
+
+volumes:
+  cevrali-data:

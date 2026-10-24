@@ -1,0 +1,27 @@
+# Hosts the synthetic demo. Review Render's current service/disk pricing before applying.
+# The application source and this file must first exist in the connected Git branch.
+services:
+  - type: web
+    name: cevrali-ehr-demo
+    runtime: docker
+    branch: cevrali-hosted-demo
+    plan: starter
+    region: oregon
+    numInstances: 1
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    autoDeploy: false
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: DATABASE_PATH
+        value: /var/lib/cevrali/cevrali.sqlite
+      - key: ACCOUNTS_PATH
+        value: /var/lib/cevrali/accounts
+    disk:
+      name: cevrali-data
+      mountPath: /var/lib/cevrali
+      sizeGB: 1
