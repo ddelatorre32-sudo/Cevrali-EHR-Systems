@@ -97,6 +97,14 @@ PDF generation uses `pdf-lib` and `@pdf-lib/fontkit`. The original form, embedde
 
 ## Efficiency workflows
 
+### Staff communication
+
+Open **Staff communication** in the sidebar or the message icon in the header. Staff can use shared practice channels, send direct messages to another active team member, search a conversation, and load older messages. Unread counts update every 15 seconds and on returning focus. Each practice has its own directory and conversations; direct messages are visible to their participants, including when another staff member is an administrator.
+
+Practice administrators can create and archive team channels and publish normal or urgent announcements. An announcement can require acknowledgement from the staff who were active when it was published. Staff explicitly choose **Acknowledge**; opening a post alone does not acknowledge it. Administrators can review the acknowledgement list and archive old announcements. Archived channels retain their history and stop accepting new messages. Existing staff account controls continue to manage invitations and deactivation.
+
+Messages, read positions, announcements, and acknowledgements persist in the practice database. Retrying the same message submission does not create a duplicate. This is internal application messaging; there is no Connecteam account connection, external SMS/email delivery, push notification service, or attachment upload. Staff can choose Staff communication as their start page under **Settings → Personal preferences**. The standalone preview supports the same workflows in page memory.
+
 ### Calendar scheduling and registration while booking
 
 **Schedule** opens a weekly time calendar, with **Day**, **Week**, **Month**, and **List** views. Use the previous/next arrows, **Today**, or the date picker to navigate. Filter by provider and use the existing All appointments / Upcoming / Completed filters. Appointment colors identify status, with text labels and a legend. The selected day's appointment list remains below the calendar for check-in, starting/continuing care, completion, visit insurance changes, and cancellation.

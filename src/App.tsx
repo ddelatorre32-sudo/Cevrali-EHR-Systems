@@ -33,6 +33,7 @@ import {
   LoaderCircle,
   LogOut,
   Menu,
+  MessageCircle,
   Plus,
   Search,
   Settings2,
@@ -68,6 +69,7 @@ import { ScheduleManagement } from "./schedule-management";
 import { TreatmentReconciliationPage } from "./treatment-ui";
 import { ScheduleCalendar, type AppointmentPrefill } from "./schedule-calendar";
 import { ReadinessPage, FaxInboxPage, FaxAlertButton } from "./operations-ui";
+import { StaffCommunicationPage, StaffUnreadBadge } from "./staff-communication-ui";
 import {
   age,
   AppointmentForm,
@@ -113,6 +115,7 @@ type Page =
   | "authorizations"
   | "account"
   | "settings"
+  | "staff"
   | "readiness"
   | "treatments"
   | "fax-inbox"
@@ -140,6 +143,7 @@ const pages: {
   { id: "intake", label: "Intake", icon: CheckCheck },
   { id: "orders", label: "Orders & referrals", icon: Stethoscope },
   { id: "reminders", label: "Reminders", icon: Bell },
+  { id: "staff", label: "Staff communication", icon: MessageCircle, section: "YOUR TEAM" },
   {
     id: "insurance",
     label: "Insurance",
@@ -825,6 +829,7 @@ function WorkspaceApp() {
                   "authorizations",
                   "account",
                   "settings",
+                  "staff",
                 ].includes(p.id),
             )
             .map((p) => (
@@ -836,6 +841,7 @@ function WorkspaceApp() {
                 >
                   <p.icon size={19} strokeWidth={1.65} />
                   <span>{p.label}</span>
+                  {p.id === "staff" && <StaffUnreadBadge key={settingsIdentity} />}
                   {p.id === "inbox" && pendingTasks.length > 0 && (
                     <em>{pendingTasks.length}</em>
                   )}
@@ -960,6 +966,13 @@ function WorkspaceApp() {
               </button>
             )}
             <FaxAlertButton onOpen={() => navigate("fax-inbox")} />
+            <button
+              className="icon-button staff-communication-shortcut"
+              aria-label="Open staff communication"
+              onClick={() => navigate("staff")}
+            >
+              <MessageCircle size={19} />
+            </button>
             <button
               className="icon-button"
               aria-label="Open settings"
@@ -1452,6 +1465,8 @@ function WorkspaceApp() {
                           "Set up your organization, invite your team, and manage account access.",
                         settings:
                           "Manage practice controls, personal preferences, and reusable note templates.",
+                        staff:
+                          "Keep your team connected with conversations and practice announcements.",
                       }[page]
                     }
                   </p>
@@ -1922,6 +1937,7 @@ function WorkspaceApp() {
               )}
               {page === "metrics" && <MetricsPage />}
               {page === "integrations" && <IntegrationsPage />}
+              {page === "staff" && <StaffCommunicationPage key={settingsIdentity} user={user} />}
               {page === "settings" && <SettingsPage key={settingsIdentity} user={user} onUserChanged={sessionUser} onSettingsChanged={setWorkspaceSettings} />}
               {page === "account" && (
                 <AccountPage

@@ -5374,6 +5374,9 @@ textarea {
   white-space: nowrap;
 }
 @media (max-width: 600px) {
+  .topbar-actions .staff-communication-shortcut {
+    display: none;
+  }
   .topbar-actions .new-patient-action {
     padding: 8px 10px;
     font-size: 11px;

@@ -48,6 +48,12 @@ try {
     ["/workflow/queue", (data) => Array.isArray(data)],
     ["/workflow/tasks", (data) => Array.isArray(data)],
     ["/workflow/templates", (data) => Array.isArray(data) && data.length >= 3],
+    [
+      "/workflow/staff",
+      (data) => Array.isArray(data.directory) &&
+        data.conversations.some((conversation) => conversation.id === "staff-general") &&
+        typeof data.unread_messages === "number",
+    ],
     ["/workflow/metrics", (data) => typeof data.measured_visits === "number"],
     ["/workflow/finance/policies", (data) => Array.isArray(data)],
     [

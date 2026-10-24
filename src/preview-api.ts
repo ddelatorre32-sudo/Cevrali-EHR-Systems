@@ -537,7 +537,8 @@ export async function previewApi<T>(
         route.pathname.startsWith("/workflow/scheduling") ||
         route.pathname.startsWith("/workflow/note-addenda") ||
         route.pathname.startsWith("/workflow/intakes") ||
-        route.pathname.startsWith("/workflow/patient-profiles"))
+        route.pathname.startsWith("/workflow/patient-profiles") ||
+        route.pathname.startsWith("/workflow/staff"))
     ) {
       const originalWorkspace = active;
       const originalUser = user;

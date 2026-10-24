@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { emptyStaffCommunicationState, staffCommunicationRequest } from "./staff-communication.js";
+import type { StaffCommunicationState } from "./staff-communication-model.js";
 import { templateLibraryRequest } from "./template-library.js";
 import { patientProfileRequest, reconcileIntakeAllergies } from "./patient-profile-engine.js";
 import type { PatientProfilesState } from "./patient-profile-model.js";
@@ -171,6 +173,7 @@ export type WorkflowState = {
   consent: Record<string, boolean>;
   user_settings: Record<string, WorkspaceSettings>;
   patient_profiles: PatientProfilesState;
+  staff_communication: StaffCommunicationState;
   settings: {
     lab_provider: string;
     pharmacy_provider: string;
@@ -276,6 +279,7 @@ export function emptyWorkflowState(): WorkflowState {
     consent: {},
     user_settings: {},
     patient_profiles: {},
+    staff_communication: emptyStaffCommunicationState(),
     settings: {
       lab_provider: "",
       pharmacy_provider: "",
@@ -296,6 +300,7 @@ export function readWorkflowState(value?: string): WorkflowState {
     operations: { ...emptyOperationsState(), ...saved.operations },
     scheduling: { ...emptySchedulingState(), ...saved.scheduling },
     note_addenda: { ...emptyNoteAddendaState(), ...saved.note_addenda },
+    staff_communication: { ...emptyStaffCommunicationState(), ...saved.staff_communication },
   };
 }
 export function baseVisit(appointment: RecordRow): Visit {
@@ -546,6 +551,8 @@ export function workflowRequest(
   normalizeAppointmentStatuses(state, ctx.appointments);
   const url = new URL(path, "https://workflows.invalid");
   const [resource, id, command] = url.pathname.split("/").filter(Boolean);
+  if (resource === "staff")
+    return staffCommunicationRequest(state.staff_communication, ctx, method, url, body);
   if (resource === "patient-profiles")
     return patientProfileRequest(state, ctx, method, url, body);
   if (resource === "scheduling")
