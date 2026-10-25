@@ -25,6 +25,7 @@ import {
   UserCheck,
 } from 'lucide-react';
 import { api, patch, post, isStandalonePreview } from './api';
+import { PatientRegistration } from './digital-checkin-ui';
 import {
   Avatar,
   Badge,
@@ -50,6 +51,9 @@ type QueueVisit = Appointment & {
   room: string;
   wait_minutes: number | null;
   intake_status: string;
+  intake_id?: string;
+  intake_expired?: boolean;
+  registration_status?: string;
   confirmation?: string;
 };
 type TaskRow = CareTask & {
@@ -288,6 +292,7 @@ export function QueuePage({
                           : `${a.wait_minutes} min waiting`}
                       </span>
                       <span>Intake: {a.intake_status}</span>
+                      <span>Registration: {a.registration_status || 'Not requested'}</span>
                       {a.confirmation && <span>Appointment confirmed</span>}
                     </div>
                     {!['Scheduled', 'Done', 'No-show', 'Cancelled'].includes(
@@ -372,6 +377,12 @@ export function QueuePage({
                         </button>
                       )}
                       {!['Done', 'No-show', 'Cancelled'].includes(stage) &&
+                        a.intake_id && a.intake_expired && (
+                          <button className="text-button" disabled={action.busy} onClick={() => action.run(async () => setLink(await post(`/workflow/intake-links/${a.intake_id}/renew`, {})))}>
+                            Renew intake link
+                          </button>
+                        )}
+                      {!['Done', 'No-show', 'Cancelled'].includes(stage) &&
                         a.intake_status === 'Not requested' && (
                           <button
                             className="text-button"
@@ -407,9 +418,10 @@ export function QueuePage({
         >
           <div className="modal-body form-stack">
             <p className="muted">
-              The patient can submit intake and confirm or cancel this
-              appointment. Clinical information changes only after a clinician
-              reviews it.
+              The patient can complete registration, upload insurance cards,
+              sign forms, submit clinical intake, and confirm or cancel this
+              appointment. Staff review contact changes, and a clinician reviews
+              clinical information before it changes the chart.
             </p>
             <label>
               Intake URL
@@ -460,6 +472,7 @@ export function QueuePage({
 
 export function PatientIntakePortal({ token }: { token: string }) {
   type Details = {
+    practice_name: string;
     patient_name: string;
     appointment: {
       date: string;
@@ -512,7 +525,7 @@ export function PatientIntakePortal({ token }: { token: string }) {
         {resource.data && (
           <>
             <div className="portal-heading">
-              <p className="eyebrow">EVERGREEN MEDICAL · SYNTHETIC DATA DEMO</p>
+              <p className="eyebrow">{resource.data.practice_name} · SYNTHETIC DATA DEMO</p>
               <h1>Hello, {resource.data.patient_name.split(' ')[0]}.</h1>
               <p>
                 Your appointment is {prettyDate(resource.data.appointment.date)}{' '}
@@ -565,6 +578,7 @@ export function PatientIntakePortal({ token }: { token: string }) {
                 </div>
               )}
             </div>
+            {!['Cancelled', 'Completed', 'No-show'].includes(resource.data.appointment.status) && <PatientRegistration token={token} />}
             {resource.data.appointment.status === 'Cancelled' ? (
               <p className="form-hint">
                 This appointment is cancelled. Please contact the practice to

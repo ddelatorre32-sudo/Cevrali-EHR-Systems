@@ -285,17 +285,30 @@ export async function previewApi<T>(
     const matching = [...workspaces.values()].find((w) =>
       w.workflows.intakes.some((i) => i.token_hash === id),
     );
-    if (matching) selectWorkspace(matching);
-    const ctx = workflowContext();
-    ctx.tokenHash = id;
+    if (!matching) fail(404, "This intake link is invalid");
+    selectWorkspace(matching);
     try {
-      return workflowRequest(
-        workflows,
+      const staged = structuredClone(workflows);
+      const auditEntries: [string, string][] = [];
+      const ctx = {
+        ...workflowContext(),
+        tokenHash: id,
+        patients: structuredClone(patients),
+        appointments: structuredClone(appointments),
+        audit: (action: string, resource: string) => auditEntries.push([action, resource]),
+      };
+      const result = workflowRequest(
+        staged,
         ctx,
         method,
-        `/public-intake/link${parts[2] ? "/appointment" : ""}`,
+        `/public-intake/link${parts.length > 2 ? "/" + parts.slice(2).join("/") : ""}`,
         body,
-      ) as T;
+      );
+      Object.assign(workflows, staged);
+      patients.splice(0, patients.length, ...ctx.patients as PreviewPatient[]);
+      appointments.splice(0, appointments.length, ...ctx.appointments as Appointment[]);
+      for (const [action, resource] of auditEntries) audit(action, resource);
+      return structuredClone(result) as T;
     } finally {
       selectWorkspace(previous);
     }
@@ -537,9 +550,11 @@ export async function previewApi<T>(
         route.pathname.startsWith("/workflow/scheduling") ||
         route.pathname.startsWith("/workflow/note-addenda") ||
         route.pathname.startsWith("/workflow/intakes") ||
+        route.pathname.startsWith("/workflow/intake-links") ||
         route.pathname.startsWith("/workflow/patient-profiles") ||
         route.pathname.startsWith("/workflow/staff") ||
-        route.pathname.startsWith("/workflow/my-work"))
+        route.pathname.startsWith("/workflow/my-work") ||
+        route.pathname.startsWith("/workflow/digital-checkin"))
     ) {
       const originalWorkspace = active;
       const originalUser = user;

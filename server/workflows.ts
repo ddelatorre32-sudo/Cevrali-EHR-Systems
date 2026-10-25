@@ -208,7 +208,11 @@ export function executeWorkflow(
     throw error;
   }
 }
-export function registerPublicIntake(app: Express, db: DatabaseSync) {
+export function registerPublicIntake(
+  app: Express,
+  db: DatabaseSync,
+  practice?: () => WorkflowContext["practice"],
+) {
   function handler(req: Request, res: Response) {
     const token = String(req.params.token);
     if (!/^[a-f0-9]{64}$/.test(token))
@@ -220,20 +224,22 @@ export function registerPublicIntake(app: Express, db: DatabaseSync) {
     const user = db
       .prepare("SELECT id, name, email, role FROM users WHERE id=?")
       .get(intake.issuer_id) as WorkflowUser;
+    if (!user)
+      return res.status(410).json({ error: "This intake link is unavailable. Please contact the practice." });
     res.json(
       executeWorkflow(
         db,
         user,
         req.method,
-        `/public-intake/link${req.params.action ? "/appointment" : ""}`,
+        `/public-intake/link${req.path === "/" ? "" : req.path}`,
         req.body,
         token,
+        practice?.(),
       ),
     );
   }
-  app.get("/api/intake-links/:token", handler);
-  app.post("/api/intake-links/:token", handler);
-  app.patch("/api/intake-links/:token/:action", handler);
+  // Preserve the full suffix so unknown actions cannot become appointment changes.
+  app.use("/api/intake-links/:token", handler);
 }
 export function registerWorkflowRoutes(
   app: Express,
@@ -255,7 +261,7 @@ export function registerWorkflowRoutes(
       undefined,
       res.locals.practice,
     );
-    if (req.method === "POST" && req.path === "/intake-links" && result.token)
+    if (req.method === "POST" && /^\/intake-links(?:\/[^/]+\/renew)?\/?$/.test(req.path) && result.token)
       onIntake?.(result.token, result.expires_at);
     res.json(result);
   });

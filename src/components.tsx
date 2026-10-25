@@ -30,7 +30,8 @@ import {
   X,
 } from 'lucide-react';
 import { api, patch, post } from './api';
-import type { Appointment, Encounter, Patient } from './types';
+import type { Appointment, Encounter, Patient, User } from './types';
+import { DigitalCheckInPage } from './digital-checkin-ui';
 import { NoteTools, useResource } from './workflow-ui';
 import { VisitContextPanel } from './order-tools';
 import { ActualTreatmentReview } from './treatment-ui';
@@ -887,6 +888,7 @@ export function AppointmentForm({
 
 export function PatientChart({
   patient,
+  user,
   onClose,
   onEncounter,
   clinical = true,
@@ -894,6 +896,7 @@ export function PatientChart({
   onChanged,
 }: {
   patient: Patient;
+  user: User;
   onClose: () => void;
   onEncounter: (patient: Patient) => void;
   clinical?: boolean;
@@ -976,6 +979,7 @@ export function PatientChart({
               'Authorizations',
               'Claim workspace',
               'Documents',
+              'Digital check-in',
               'Change history',
             ]
           : [
@@ -986,6 +990,7 @@ export function PatientChart({
               'Authorizations',
               'Claim workspace',
               'Documents',
+              'Digital check-in',
               'Change history',
             ]
         ).map((t) => (
@@ -999,6 +1004,7 @@ export function PatientChart({
         ))}
       </div>
       <div className="chart-content">
+        {tab === 'Digital check-in' && <DigitalCheckInPage user={user} patientId={patient.id} onChanged={profileChanged} />}
         {tab === 'Allergies' && clinical && <PatientAllergies patientId={patient.id} onChanged={profileChanged} onDirtyChange={setAllergyDirty} />}
         {tab === 'Change history' && <PatientProfileHistory key={profileVersion} patientId={patient.id} clinical={clinical} />}
         {tab === 'Summary' && (

@@ -251,7 +251,7 @@ export function createApp(db: DatabaseSync, account?: AccountContext) {
     audit(user as User, "Signed in", "workspace");
     res.json(signedIn);
   });
-  registerPublicIntake(app, db);
+  registerPublicIntake(app, db, account ? () => account.store.practice(account.practiceId) : undefined);
   app.use("/api", (req, res, next) => {
     const token = (req.headers.cookie || "")
       .split(";")

@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { digitalCheckInRequest, emptyDigitalCheckInState, ensureCheckInPacket } from "./digital-checkin-engine.js";
+import type { DigitalCheckInState } from "./digital-checkin-model.js";
 import { staffTaskRequest } from "./staff-task-engine.js";
 import { myWorkRequest } from "./my-work-engine.js";
 import { emptyStaffCommunicationState, staffCommunicationRequest } from "./staff-communication.js";
@@ -176,6 +178,7 @@ export type WorkflowState = {
   user_settings: Record<string, WorkspaceSettings>;
   patient_profiles: PatientProfilesState;
   staff_communication: StaffCommunicationState;
+  digital_checkin: DigitalCheckInState;
   settings: {
     lab_provider: string;
     pharmacy_provider: string;
@@ -282,6 +285,7 @@ export function emptyWorkflowState(): WorkflowState {
     user_settings: {},
     patient_profiles: {},
     staff_communication: emptyStaffCommunicationState(),
+    digital_checkin: emptyDigitalCheckInState(),
     settings: {
       lab_provider: "",
       pharmacy_provider: "",
@@ -303,6 +307,7 @@ export function readWorkflowState(value?: string): WorkflowState {
     scheduling: { ...emptySchedulingState(), ...saved.scheduling },
     note_addenda: { ...emptyNoteAddendaState(), ...saved.note_addenda },
     staff_communication: { ...emptyStaffCommunicationState(), ...saved.staff_communication },
+    digital_checkin: { ...emptyDigitalCheckInState(), ...saved.digital_checkin },
   };
 }
 export function baseVisit(appointment: RecordRow): Visit {
@@ -553,6 +558,8 @@ export function workflowRequest(
   normalizeAppointmentStatuses(state, ctx.appointments);
   const url = new URL(path, "https://workflows.invalid");
   const [resource, id, command] = url.pathname.split("/").filter(Boolean);
+  if (resource === "digital-checkin")
+    return digitalCheckInRequest(state, ctx, method, url, body);
   if (resource === "staff-tasks")
     return staffTaskRequest(state.staff_communication, ctx, method, url, body);
   if (resource === "my-work")
@@ -589,13 +596,20 @@ export function workflowRequest(
   }
   if (resource === "public-intake") {
     const intake = publicIntake(state, ctx);
+    if (id !== "link") workflowError(404, "Intake route not found");
+    if (command === "registration")
+      return digitalCheckInRequest(state, ctx, method, url, body);
+    if (url.pathname.split("/").filter(Boolean).length > 3 ||
+      (command && command !== "appointment"))
+      workflowError(404, "Intake route not found");
     const p = patient(ctx, intake.patient_id);
     const a =
       ctx.appointments.find((a) => a.id === intake.appointment_id) ||
       workflowError(404, "Appointment not found");
-    if (method === "GET")
+    if (method === "GET" && !command)
       return {
         id: intake.id,
+        practice_name: ctx.practice?.name || "Your practice",
         patient_name: `${p.first_name} ${p.last_name}`,
         appointment: {
           date: a.date,
@@ -628,7 +642,7 @@ export function workflowRequest(
       );
       return { ok: true };
     }
-    if (method === "POST") {
+    if (method === "POST" && !command) {
       if (intake.status !== "Requested")
         workflowError(409, "This form has already been submitted");
       if (["Cancelled", "Completed", "No-show"].includes(a.status))
@@ -671,6 +685,7 @@ export function workflowRequest(
       ctx.audit("Patient self-service: submitted intake", intake.id);
       return { ok: true };
     }
+    workflowError(404, "Intake route not found");
   }
   if (resource === "team" && method === "GET")
     return ctx.users
@@ -684,6 +699,8 @@ export function workflowRequest(
       .map((a) => {
         const p = patient(ctx, a.patient_id);
         const visit = state.visits[a.id] || baseVisit(a);
+        const intake = state.intakes.find((entry) => entry.appointment_id === a.id && entry.status !== "Revoked");
+        const registration = state.digital_checkin.packets.find((packet) => packet.id === intake?.id);
         return {
           ...a,
           first_name: p.first_name,
@@ -701,10 +718,10 @@ export function workflowRequest(
                   ),
                 )
               : null,
-          intake_status:
-            state.intakes.find(
-              (i) => i.appointment_id === a.id && i.status !== "Revoked",
-            )?.status || "Not requested",
+          intake_status: intake?.status || "Not requested",
+          intake_id: intake?.id,
+          intake_expired: Boolean(intake && intake.expires_at <= ctx.now),
+          registration_status: registration?.status || "Not requested",
         };
       });
   }
@@ -836,7 +853,19 @@ export function workflowRequest(
       return pref;
     }
   }
-  if (resource === "intake-links" && method === "POST") {
+  if (resource === "intake-links" && method === "POST" && id && command === "renew" && url.pathname.split("/").filter(Boolean).length === 3) {
+    z.object({}).strict().parse(body);
+    const intake = state.intakes.find((entry) => entry.id === id && entry.status !== "Revoked") || workflowError(404, "Intake not found");
+    const appointment = ctx.appointments.find((entry) => entry.id === intake.appointment_id) || workflowError(404, "Appointment not found");
+    if (["Cancelled", "Completed", "No-show"].includes(appointment.status)) workflowError(409, "Choose an active appointment");
+    if (!ctx.makeToken) workflowError(500, "Intake links are unavailable");
+    const token = ctx.makeToken();
+    intake.token_hash = token.hash;
+    intake.expires_at = new Date(Date.parse(ctx.now) + 72 * 3600000).toISOString();
+    ctx.audit("Renewed patient intake link; previous link revoked", intake.id);
+    return { id: intake.id, token: token.token, expires_at: intake.expires_at };
+  }
+  if (resource === "intake-links" && method === "POST" && !id) {
     const input = z.object({ appointment_id: short }).parse(body);
     const a =
       ctx.appointments.find((a) => a.id === input.appointment_id) ||
@@ -870,6 +899,7 @@ export function workflowRequest(
       issuer_id: ctx.user.id,
     };
     state.intakes.unshift(intake);
+    ensureCheckInPacket(state, ctx, intake);
     ctx.audit("Created patient intake link", intake.id);
     return { id: intake.id, token: token.token, expires_at: intake.expires_at };
   }

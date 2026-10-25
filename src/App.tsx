@@ -72,6 +72,7 @@ import { ScheduleCalendar, type AppointmentPrefill } from "./schedule-calendar";
 import { ReadinessPage, FaxInboxPage, FaxAlertButton } from "./operations-ui";
 import { StaffCommunicationPage, StaffUnreadBadge } from "./staff-communication-ui";
 import { MyWorkPage } from "./my-work-ui";
+import { DigitalCheckInBadge, DigitalCheckInPage } from "./digital-checkin-ui";
 import {
   age,
   AppointmentForm,
@@ -108,6 +109,7 @@ type Page =
   | "inbox"
   | "queue"
   | "intake"
+  | "digital-checkin"
   | "orders"
   | "reminders"
   | "metrics"
@@ -142,6 +144,7 @@ const pages: {
   { id: "fax-inbox", label: "Fax inbox", icon: FileText },
   { id: "encounters", label: "Encounters", icon: FileText },
   { id: "queue", label: "Patient queue", icon: Activity },
+  { id: "digital-checkin", label: "Digital check-in", icon: CheckCheck },
   { id: "inbox", label: "Care inbox", icon: Inbox, section: "CARE MANAGEMENT" },
   { id: "labs", label: "Lab results", icon: FlaskConical },
   { id: "intake", label: "Intake", icon: CheckCheck },
@@ -835,6 +838,7 @@ function WorkspaceApp() {
                   "readiness",
                   "fax-inbox",
                   "queue",
+                  "digital-checkin",
                   "reminders",
                   "insurance",
                   "billing",
@@ -856,6 +860,7 @@ function WorkspaceApp() {
                   <p.icon size={19} strokeWidth={1.65} />
                   <span>{p.label}</span>
                   {p.id === "staff" && <StaffUnreadBadge key={settingsIdentity} />}
+                  {p.id === "digital-checkin" && <DigitalCheckInBadge key={settingsIdentity} />}
                   {p.id === "inbox" && pendingTasks.length > 0 && (
                     <em>{pendingTasks.length}</em>
                   )}
@@ -1483,6 +1488,8 @@ function WorkspaceApp() {
                           "Keep your team connected with conversations and practice announcements.",
                         "my-work":
                           "Your assignments, reviews, and follow-ups in one place.",
+                        "digital-checkin":
+                          "Review registration details, insurance cards, and signed consent forms.",
                       }[page]
                     }
                   </p>
@@ -1937,6 +1944,7 @@ function WorkspaceApp() {
                 />
               )}
               {page === "intake" && <IntakePage onChanged={refresh} />}
+              {page === "digital-checkin" && <DigitalCheckInPage key={settingsIdentity} user={user} onOpenPatient={openChart} onChanged={refresh} />}
               {page === "readiness" && <ReadinessPage onChart={openChart} />}
               {page === "fax-inbox" && (
                 <FaxInboxPage
@@ -2110,6 +2118,7 @@ function WorkspaceApp() {
         <PatientChart
           key={chart.id}
           patient={chart}
+          user={user}
           clinical={clinical}
           initialTab={chartTab}
           onClose={() => setChart(null)}
