@@ -153,6 +153,8 @@ function selectWorkspace(workspace: Workspace) {
   } = workspace);
 }
 let user: Staff | null = demoUsers.find((u) => u.role === "clinician")!;
+const newPrescribingSession = () => Array.from(crypto.getRandomValues(new Uint8Array(32)), byte => byte.toString(16).padStart(2, "0")).join("");
+let prescribingSessionId = newPrescribingSession();
 const userView = () => {
   const p = active.practice;
   return user
@@ -250,6 +252,8 @@ export async function previewApi<T>(
     return { status: "ok", mode: "offline-preview" } as T;
   const workflowContext = (): WorkflowContext => ({
     practice: active.practice,
+    prescribing_session_id: prescribingSessionId,
+    verifyPrescribingPassword: password => Boolean(user && user.is_active && user.role === "clinician" && active.passwords.get(user.email) === password),
     user: user || users[0],
     users,
     patients,
@@ -351,6 +355,7 @@ export async function previewApi<T>(
     workspaces.set(practice.id, workspace);
     selectWorkspace(workspace);
     user = owner;
+    prescribingSessionId = newPrescribingSession();
     audit("Created practice account", practice.id);
     return structuredClone(userView()) as T;
   }
@@ -378,6 +383,7 @@ export async function previewApi<T>(
         is_active: true,
       };
       workspace.users.push(user);
+      prescribingSessionId = newPrescribingSession();
       workspace.passwords.set(user.email, input.password);
       invite.status = "Accepted";
       selectWorkspace(workspace);
@@ -398,6 +404,7 @@ export async function previewApi<T>(
       fail(401, "Email or password is incorrect");
     selectWorkspace(workspace!);
     user = candidate;
+    prescribingSessionId = newPrescribingSession();
     audit("Opened preview workspace", "preview");
     return structuredClone(userView()) as T;
   }
@@ -407,6 +414,7 @@ export async function previewApi<T>(
   if (route.pathname === "/auth/me") return structuredClone(userView()) as T;
   if (route.pathname === "/auth/logout") {
     user = null;
+    prescribingSessionId = newPrescribingSession();
     return { ok: true } as T;
   }
   if (resource === "account") {
@@ -536,6 +544,7 @@ export async function previewApi<T>(
       if (input.current_password !== active.passwords.get(user.email))
         fail(400, "Current password is incorrect");
       active.passwords.set(user.email, input.password);
+      prescribingSessionId = newPrescribingSession();
       audit("Changed account password", user.id);
       return structuredClone(userView()) as T;
     }
@@ -554,7 +563,8 @@ export async function previewApi<T>(
         route.pathname.startsWith("/workflow/patient-profiles") ||
         route.pathname.startsWith("/workflow/staff") ||
         route.pathname.startsWith("/workflow/my-work") ||
-        route.pathname.startsWith("/workflow/digital-checkin"))
+        route.pathname.startsWith("/workflow/digital-checkin") ||
+        route.pathname.startsWith("/workflow/prescribing"))
     ) {
       const originalWorkspace = active;
       const originalUser = user;

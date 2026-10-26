@@ -32,6 +32,7 @@ import {
 import { api, patch, post } from './api';
 import type { Appointment, Encounter, Patient, User } from './types';
 import { DigitalCheckInPage } from './digital-checkin-ui';
+import { PrescribingPanel, PrescriptionLauncher } from './prescribing-ui';
 import { NoteTools, useResource } from './workflow-ui';
 import { VisitContextPanel } from './order-tools';
 import { ActualTreatmentReview } from './treatment-ui';
@@ -971,6 +972,7 @@ export function PatientChart({
           ? [
               'Summary',
               'Allergies',
+              'Medications & prescribing',
               'Encounters',
               'Lab results',
               'Insurance',
@@ -1004,6 +1006,7 @@ export function PatientChart({
         ))}
       </div>
       <div className="chart-content">
+        {tab === 'Medications & prescribing' && clinical && <PrescribingPanel user={user} patientId={patient.id} onChanged={profileChanged} />}
         {tab === 'Digital check-in' && <DigitalCheckInPage user={user} patientId={patient.id} onChanged={profileChanged} />}
         {tab === 'Allergies' && clinical && <PatientAllergies patientId={patient.id} onChanged={profileChanged} onDirtyChange={setAllergyDirty} />}
         {tab === 'Change history' && <PatientProfileHistory key={profileVersion} patientId={patient.id} clinical={clinical} />}
@@ -1232,11 +1235,13 @@ export function PatientChart({
 
 export function EncounterEditor({
   encounter,
+  user,
   patientName,
   onClose,
   onSaved,
 }: {
   encounter: Encounter;
+  user: User;
   patientName: string;
   onClose: () => void;
   onSaved: () => Promise<void>;
@@ -1261,6 +1266,7 @@ export function EncounterEditor({
     encounter.billing_account_id ||
       defaultPatientAccountId(encounter.patient_id),
   );
+  const [savedBillingId, setSavedBillingId] = useState(encounter.billing_account_id || defaultPatientAccountId(encounter.patient_id));
   const [wc, setWc] = useState(
     wcDocumentationInput.parse(encounter.wc_documentation || {}),
   );
@@ -1307,6 +1313,7 @@ export function EncounterEditor({
         },
       );
       setUpdatedAt(r.updated_at);
+      setSavedBillingId(billingId);
       setSaved(true);
       setDirty(false);
       await onSaved();
@@ -1336,7 +1343,7 @@ export function EncounterEditor({
       wide
     >
       <div className="visit-workspace">
-        <VisitContextPanel encounter={encounter} />
+        <VisitContextPanel encounter={encounter} user={user} prescribingBillingAccountId={savedBillingId} prescribingDisabled={busy || billingId !== savedBillingId} />
         <div className="modal-body encounter-form">
           <div className="encounter-top">
             <Badge>{encounter.status}</Badge>
@@ -1493,6 +1500,10 @@ export function EncounterEditor({
               </label>
             ),
           )}
+          <div className="prescribing-encounter-launch">
+            <PrescriptionLauncher user={user} patientId={encounter.patient_id} encounterId={encounter.id} billingAccountId={savedBillingId} disabled={busy || billingId !== savedBillingId} />
+            {billingId !== savedBillingId && <p className="form-hint">Save the visit insurance account before preparing a prescription.</p>}
+          </div>
           <ReceivedResultsSection
             encounterId={encounter.id}
             locked={locked}

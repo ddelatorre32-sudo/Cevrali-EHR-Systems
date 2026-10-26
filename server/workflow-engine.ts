@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { emptyPrescribingState, prescribingRequest } from "./prescribing-engine.js";
+import type { PrescribingState } from "./prescribing-model.js";
 import { digitalCheckInRequest, emptyDigitalCheckInState, ensureCheckInPacket } from "./digital-checkin-engine.js";
 import type { DigitalCheckInState } from "./digital-checkin-model.js";
 import { staffTaskRequest } from "./staff-task-engine.js";
@@ -179,6 +181,7 @@ export type WorkflowState = {
   patient_profiles: PatientProfilesState;
   staff_communication: StaffCommunicationState;
   digital_checkin: DigitalCheckInState;
+  prescribing: PrescribingState;
   settings: {
     lab_provider: string;
     pharmacy_provider: string;
@@ -210,6 +213,8 @@ export type WorkflowContext = {
   audit: (action: string, resource: string) => void;
   makeToken?: () => { token: string; hash: string };
   tokenHash?: string;
+  prescribing_session_id?: string;
+  verifyPrescribingPassword?: (password: string) => boolean;
   validateTreatment?: (bill: import("./finance-engine.js").Bill) => void;
 };
 export function workflowError(status: number, message: string): never {
@@ -286,6 +291,7 @@ export function emptyWorkflowState(): WorkflowState {
     patient_profiles: {},
     staff_communication: emptyStaffCommunicationState(),
     digital_checkin: emptyDigitalCheckInState(),
+    prescribing: emptyPrescribingState(),
     settings: {
       lab_provider: "",
       pharmacy_provider: "",
@@ -308,6 +314,7 @@ export function readWorkflowState(value?: string): WorkflowState {
     note_addenda: { ...emptyNoteAddendaState(), ...saved.note_addenda },
     staff_communication: { ...emptyStaffCommunicationState(), ...saved.staff_communication },
     digital_checkin: { ...emptyDigitalCheckInState(), ...saved.digital_checkin },
+    prescribing: { ...emptyPrescribingState(), ...saved.prescribing },
   };
 }
 export function baseVisit(appointment: RecordRow): Visit {
@@ -558,6 +565,8 @@ export function workflowRequest(
   normalizeAppointmentStatuses(state, ctx.appointments);
   const url = new URL(path, "https://workflows.invalid");
   const [resource, id, command] = url.pathname.split("/").filter(Boolean);
+  if (resource === "prescribing")
+    return prescribingRequest(state, ctx, method, url, body);
   if (resource === "digital-checkin")
     return digitalCheckInRequest(state, ctx, method, url, body);
   if (resource === "staff-tasks")

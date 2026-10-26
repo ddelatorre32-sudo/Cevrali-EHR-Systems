@@ -2,6 +2,7 @@ import { clinicDate } from "./clinic-dates";
 import { useWorkSourceFocus } from "./work-source-focus";
 import { useState, type FormEvent } from "react";
 import { VisitFinanceContext } from "./finance-ui";
+import { PrescriptionLauncher } from "./prescribing-ui";
 import {
   ArrowDownToLine,
   Check,
@@ -14,7 +15,7 @@ import { api, patch, post } from "./api";
 import { Badge, Empty, Modal, fullName, prettyDate, mrn } from "./components";
 import { useResource, IntakePage } from "./workflow-ui";
 import type { CareOrder, CareTask } from "../server/workflow-engine";
-import type { Encounter, Lab, Patient } from "./types";
+import type { Encounter, Lab, Patient, User } from "./types";
 
 type Order = CareOrder & { first_name: string; last_name: string };
 const today = () =>
@@ -540,7 +541,9 @@ export function OrderList({
   );
 }
 
-export function VisitContextPanel({ encounter }: { encounter: Encounter }) {
+export function VisitContextPanel({ encounter, user, prescribingBillingAccountId, prescribingDisabled }: {
+  encounter: Encounter; user: User; prescribingBillingAccountId?: string; prescribingDisabled?: boolean;
+}) {
   const tasks = useResource<CareTask[]>("/workflow/tasks", []);
   const chart = useResource<Patient | null>(
     `/patients/${encounter.patient_id}`,
@@ -596,6 +599,7 @@ export function VisitContextPanel({ encounter }: { encounter: Encounter }) {
         >
           Orders
         </button>
+        <button className={tab === "Prescribing" ? "active" : ""} onClick={() => setTab("Prescribing")}>Medications</button>
         <button
           className={tab === "Follow-up" ? "active" : ""}
           onClick={() => setTab("Follow-up")}
@@ -677,6 +681,12 @@ export function VisitContextPanel({ encounter }: { encounter: Encounter }) {
           encounterId={encounter.id}
         />
       )}
+      {tab === "Prescribing" && <div className="visit-followup">
+        <h4>Medications & prescribing</h4>
+        <p className="form-hint">Review medications and allergies, prepare a prescription, and simulate authorization for this visit.</p>
+        <PrescriptionLauncher user={user} patientId={encounter.patient_id} encounterId={encounter.id} billingAccountId={prescribingBillingAccountId} disabled={prescribingDisabled} />
+        {prescribingDisabled && <p className="form-hint">Save visit insurance changes before prescribing.</p>}
+      </div>}
       {tab === "Intake" && (
         <IntakePage
           patientId={encounter.patient_id}

@@ -289,6 +289,7 @@ export function createApp(db: DatabaseSync, account?: AccountContext) {
         ),
       );
     res.locals.user = user;
+    res.locals.prescribing_session_id = sessionHash(token);
     if (account)
       res.locals.practice = account.store.practice(account.practiceId);
     next();

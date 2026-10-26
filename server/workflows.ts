@@ -1,4 +1,4 @@
-import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
 import type { Express, Request, Response } from "express";
 import type { DatabaseSync } from "node:sqlite";
 import { clinicDate } from "./database.js";
@@ -152,12 +152,20 @@ export function executeWorkflow(
   body?: unknown,
   token?: string,
   practice?: WorkflowContext["practice"],
+  prescribingSessionId?: string,
 ) {
   db.exec("BEGIN IMMEDIATE");
   try {
     const state = loadWorkflow(db);
     const ctx = context(db, user);
     ctx.practice = practice;
+    ctx.prescribing_session_id = prescribingSessionId;
+    ctx.verifyPrescribingPassword = (password) => {
+      const member = db.prepare("SELECT password FROM users WHERE id=? AND role='clinician' AND is_active=1").get(user.id) as Row | undefined;
+      const [salt, expected] = String(member?.password || "").split(":");
+      const actual = scryptSync(password, salt || "unrecognized", 64);
+      return Boolean(member && expected && /^[a-f0-9]{128}$/.test(expected) && timingSafeEqual(actual, Buffer.from(expected, "hex")));
+    };
     if (token) ctx.tokenHash = hashToken(token);
     const beforePatients = new Map(
       ctx.patients.map((p) => [
@@ -260,6 +268,7 @@ export function registerWorkflowRoutes(
       body,
       undefined,
       res.locals.practice,
+      res.locals.prescribing_session_id,
     );
     if (req.method === "POST" && /^\/intake-links(?:\/[^/]+\/renew)?\/?$/.test(req.path) && result.token)
       onIntake?.(result.token, result.expires_at);

@@ -35,6 +35,7 @@ import {
   LogOut,
   Menu,
   MessageCircle,
+  Pill,
   Plus,
   Search,
   Settings2,
@@ -73,6 +74,7 @@ import { ReadinessPage, FaxInboxPage, FaxAlertButton } from "./operations-ui";
 import { StaffCommunicationPage, StaffUnreadBadge } from "./staff-communication-ui";
 import { MyWorkPage } from "./my-work-ui";
 import { DigitalCheckInBadge, DigitalCheckInPage } from "./digital-checkin-ui";
+import { PrescribingBadge, PrescribingPage } from "./prescribing-ui";
 import {
   age,
   AppointmentForm,
@@ -110,6 +112,7 @@ type Page =
   | "queue"
   | "intake"
   | "digital-checkin"
+  | "prescribing"
   | "orders"
   | "reminders"
   | "metrics"
@@ -149,6 +152,7 @@ const pages: {
   { id: "labs", label: "Lab results", icon: FlaskConical },
   { id: "intake", label: "Intake", icon: CheckCheck },
   { id: "orders", label: "Orders & referrals", icon: Stethoscope },
+  { id: "prescribing", label: "Prescriptions & refills", icon: Pill },
   { id: "reminders", label: "Reminders", icon: Bell },
   { id: "staff", label: "Staff communication", icon: MessageCircle, section: "YOUR TEAM" },
   {
@@ -839,6 +843,7 @@ function WorkspaceApp() {
                   "fax-inbox",
                   "queue",
                   "digital-checkin",
+                  "prescribing",
                   "reminders",
                   "insurance",
                   "billing",
@@ -861,6 +866,7 @@ function WorkspaceApp() {
                   <span>{p.label}</span>
                   {p.id === "staff" && <StaffUnreadBadge key={settingsIdentity} />}
                   {p.id === "digital-checkin" && <DigitalCheckInBadge key={settingsIdentity} />}
+                  {p.id === "prescribing" && <PrescribingBadge key={settingsIdentity} />}
                   {p.id === "inbox" && pendingTasks.length > 0 && (
                     <em>{pendingTasks.length}</em>
                   )}
@@ -1490,6 +1496,8 @@ function WorkspaceApp() {
                           "Your assignments, reviews, and follow-ups in one place.",
                         "digital-checkin":
                           "Review registration details, insurance cards, and signed consent forms.",
+                        prescribing:
+                          "Prepare prescriptions, review refill requests, and simulate prescriber authorization.",
                       }[page]
                     }
                   </p>
@@ -1944,6 +1952,7 @@ function WorkspaceApp() {
                 />
               )}
               {page === "intake" && <IntakePage onChanged={refresh} />}
+              {page === "prescribing" && <PrescribingPage key={settingsIdentity} user={user} patients={patients} onOpenPatient={openChart} />}
               {page === "digital-checkin" && <DigitalCheckInPage key={settingsIdentity} user={user} onOpenPatient={openChart} onChanged={refresh} />}
               {page === "readiness" && <ReadinessPage onChart={openChart} />}
               {page === "fax-inbox" && (
@@ -2141,6 +2150,7 @@ function WorkspaceApp() {
       {editor && (
         <EncounterEditor
           key={editor.id}
+          user={user}
           encounter={editor}
           patientName={fullName(
             patients.find((p) => p.id === editor.patient_id) || {},

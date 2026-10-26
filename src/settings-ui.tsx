@@ -4,6 +4,7 @@ import { patch, isStandalonePreview } from "./api";
 import { AccountPage } from "./accounts-ui";
 import { IntegrationsPage } from "./order-tools";
 import { TemplateSettings } from "./template-settings";
+import { PrescribingSettings } from "./prescribing-ui";
 import { useResource } from "./workflow-ui";
 import type { WorkspaceSettings } from "../server/settings-model";
 import type { User } from "./types";
@@ -61,7 +62,7 @@ function PersonalSettings({ user, onSaved }: { user: User; onSaved: (settings: W
   </section>;
 }
 
-type Section = "personal" | "Practice" | "Team" | "Security" | "connections" | "templates";
+type Section = "personal" | "Practice" | "Team" | "Security" | "connections" | "templates" | "prescribing";
 export function SettingsPage({ user, onUserChanged, onSettingsChanged }: {
   user: User;
   onUserChanged: (user: User) => void;
@@ -74,6 +75,7 @@ export function SettingsPage({ user, onUserChanged, onSettingsChanged }: {
     ...(user.is_admin ? [{ id: "Team" as const, label: "Team & access", detail: "Staff roles & invitations", icon: UsersRound }] : []),
     { id: "Security", label: "Security", detail: "Your password & access", icon: ShieldCheck },
     { id: "connections", label: "Connections", detail: "Lab, pharmacy & reminders", icon: Link2 },
+    ...((user.is_admin || user.role === "clinician") ? [{ id: "prescribing" as const, label: "Prescribing", detail: "Demo prescriber permissions", icon: ShieldCheck }] : []),
     ...(user.role === "clinician" ? [{ id: "templates" as const, label: "Templates & phrases", detail: "Reusable clinical documentation", icon: ClipboardList }] : []),
   ];
   const selected = categories.find(c => c.id === section) || categories[0];
@@ -86,6 +88,7 @@ export function SettingsPage({ user, onUserChanged, onSettingsChanged }: {
         {selected.id === "personal" && <PersonalSettings user={user} onSaved={onSettingsChanged} />}
         {(["Practice", "Team", "Security"] as Section[]).includes(selected.id) && <AccountPage section={selected.id as "Practice" | "Team" | "Security"} user={user} onUserChanged={onUserChanged} />}
         {selected.id === "connections" && <IntegrationsPage />}
+        {selected.id === "prescribing" && <PrescribingSettings user={user} />}
         {selected.id === "templates" && user.role === "clinician" && <TemplateSettings user={user} />}
       </div>
     </div>
