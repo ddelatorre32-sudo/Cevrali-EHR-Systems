@@ -4,6 +4,13 @@ dist-server/
 preview/
 .data/
 .env
+.env.*
+!.env.example
+.secrets/
+*.key
+*.pem
+backups/
+*.cevrali-backup
 test-results/
 playwright-report/
 *.log

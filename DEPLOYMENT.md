@@ -1,5 +1,7 @@
 # Host Cevrali as a website
 
+For the restricted synthetic staff pilot, use [PRODUCTION-READINESS.md](PRODUCTION-READINESS.md), [BACKUP-RECOVERY.md](BACKUP-RECOVERY.md), and [AUDIT-INTEGRITY.md](AUDIT-INTEGRITY.md). The hosting recipes below explicitly run demo mode. This release refuses clinical production startup; publishing it does not authorize real patient use.
+
 Cevrali already has a browser frontend and an application server. The Docker deployment serves both from one service, with persistent storage for the demo database and organization accounts. Hosting that service gives users a normal website address. A custom domain is optional.
 
 This deployment is for the existing synthetic demo. Public demo accounts and demo external connections remain enabled; use synthetic information only. Hosting this demo does not establish readiness for real clinical use.

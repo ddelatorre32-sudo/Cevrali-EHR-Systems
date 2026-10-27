@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "environment": "production",
+  "release_commit": null,
+  "approvals": {
+    "security": { "decision": "pending", "owner": null, "reviewed_at": null, "evidence_ref": null },
+    "clinical": { "decision": "pending", "owner": null, "reviewed_at": null, "evidence_ref": null },
+    "privacy": { "decision": "pending", "owner": null, "reviewed_at": null, "evidence_ref": null },
+    "restore": { "decision": "pending", "owner": null, "reviewed_at": null, "evidence_ref": null },
+    "hosting": { "decision": "pending", "owner": null, "reviewed_at": null, "evidence_ref": null },
+    "operations": { "decision": "pending", "owner": null, "reviewed_at": null, "evidence_ref": null }
+  }
+}

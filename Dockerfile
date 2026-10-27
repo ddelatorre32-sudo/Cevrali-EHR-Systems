@@ -20,6 +20,7 @@ FROM node:24-bookworm-slim AS runtime
 
 WORKDIR /app
 ENV NODE_ENV=production \
+    CEVRALI_MODE=demo \
     PORT=8080 \
     DATABASE_PATH=/var/lib/cevrali/cevrali.sqlite \
     ACCOUNTS_PATH=/var/lib/cevrali/accounts
@@ -36,6 +37,7 @@ COPY --from=build --chown=node:node /app/package.json /app/package-lock.json ./
 COPY --from=build --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/dist ./dist
 COPY --from=build --chown=node:node /app/dist-server ./dist-server
+COPY --from=build --chown=node:node /app/scripts ./scripts
 COPY deploy/docker-entrypoint.sh /usr/local/bin/cevrali-entrypoint
 RUN chmod 755 /usr/local/bin/cevrali-entrypoint
 

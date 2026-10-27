@@ -78,7 +78,8 @@ export async function api<T>(path: string, options?: RequestInit): Promise<T> {
     return previewApi<T>(path, options);
   }
   const version = contextVersion;
-  const checkContext = !path.startsWith("/accounts/") && path !== "/auth/login";
+  const checkContext = !path.startsWith("/accounts/") &&
+    !path.startsWith("/auth/mfa/") && path !== "/auth/login" && path !== "/runtime";
   const res = await fetch(`/api${path}`, {
     ...options,
     headers: {
@@ -101,7 +102,8 @@ export async function api<T>(path: string, options?: RequestInit): Promise<T> {
   // Hosting gateways can return HTML while the application is restarting.
   // Keep the HTTP status and show a useful error instead of a JSON parser error.
   const body = await res.text();
-  assertCurrentSession(version);
+  // Runtime metadata is public and independent of the account being signed in.
+  if (path !== "/runtime") assertCurrentSession(version);
   let data: unknown;
   try {
     data = JSON.parse(body);
@@ -120,14 +122,14 @@ export async function api<T>(path: string, options?: RequestInit): Promise<T> {
   }
   if (data === undefined)
     throw new ApiError(502, responseError(502));
-  if (
-    (options?.method || "GET") !== "GET" &&
-    (path === "/auth/login" ||
-      path === "/auth/logout" ||
-      path === "/account/password" ||
-      path === "/accounts/signup" ||
-      /^\/accounts\/invitations\/[^/]+\/accept$/.test(path))
-  )
+  const changedUser = data && typeof data === "object" && "id" in data;
+  const verifiedSecurity = data && typeof data === "object" && "ok" in data && data.ok === true;
+  if ((options?.method || "GET") !== "GET" && (
+    path === "/auth/logout" ||
+    (changedUser && (path === "/auth/login" || path === "/account/password" ||
+      path === "/accounts/signup" || /^\/accounts\/invitations\/[^/]+\/accept$/.test(path))) ||
+    (verifiedSecurity && /^\/(?:auth\/mfa\/(?:complete|enroll)|account\/mfa\/(?:confirm|enroll|recovery-codes|disable))$/.test(path))
+  ))
     notifyOtherTabs();
   return data as T;
 }

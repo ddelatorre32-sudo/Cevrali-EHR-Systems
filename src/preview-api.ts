@@ -243,6 +243,9 @@ export async function previewApi<T>(
   options: RequestInit = {},
 ): Promise<T> {
   const route = new URL(path, "https://cevrali-preview.invalid");
+  if (route.pathname === "/runtime" && (!options?.method || options.method === "GET"))
+    return { mode: "demo", demo_enabled: true, public_signup_enabled: true,
+      mfa_required: false, clinical_use_allowed: false } as T;
   const method = options.method || "GET";
   const body = options.body ? JSON.parse(String(options.body)) : {};
   const parts = route.pathname.split("/").filter(Boolean);

@@ -54,6 +54,7 @@ import {
   setPracticeContext,
 } from "./api";
 import { AccountPage, PracticeSignup, StaffJoin } from "./accounts-ui";
+import { MfaAuthentication, type MfaPending } from "./access-security-ui";
 import { BillingAccountSelect } from "./patient-accounts-ui";
 import {
   QueuePage,
@@ -194,16 +195,40 @@ const clinicHour = () =>
     }).format(new Date()),
   );
 const demo = { email: "alex@cevrali.demo", password: "CevraliDemo2026!" };
+type RuntimeInfo = {
+  mode: "demo" | "pilot" | "production";
+  demo_enabled: boolean;
+  public_signup_enabled: boolean;
+  mfa_required: boolean;
+  clinical_use_allowed: boolean;
+};
+function useRuntimeInfo() {
+  const [runtime, setRuntime] = useState<RuntimeInfo | null>(null);
+  const [runtimeError, setRuntimeError] = useState(false);
+  useEffect(() => {
+    let current = true;
+    void api<RuntimeInfo>("/runtime").then(value => {
+      if (current) setRuntime(value);
+    }).catch(() => { if (current) setRuntimeError(true); });
+    return () => { current = false; };
+  }, []);
+  return { runtime, runtimeError };
+}
 
-function Login({ onLogin }: { onLogin: (u: User) => void }) {
+function Login({ onLogin, runtime, runtimeError }: {
+  onLogin: (u: User) => void; runtime: RuntimeInfo | null; runtimeError: boolean;
+}) {
   const [signup, setSignup] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [challenge, setChallenge] = useState<MfaPending | null>(null);
   async function login(credentials: typeof demo) {
     setBusy(true);
     setError("");
     try {
-      onLogin(await post<User>("/auth/login", credentials));
+      const result = await post<User | MfaPending>("/auth/login", credentials);
+      if ("kind" in result && result.kind === "mfa") setChallenge(result);
+      else onLogin(result as User);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -274,6 +299,12 @@ function Login({ onLogin }: { onLogin: (u: User) => void }) {
       </section>
       <main className="login-main">
         <div className="login-card">
+          {challenge ? <MfaAuthentication
+            key={challenge.challenge_token}
+            challenge={challenge}
+            onAuthenticated={onLogin}
+            onCancel={() => { setChallenge(null); setError(""); }}
+          /> : <>
           <span className="login-mark">
             <Stethoscope size={25} />
           </span>
@@ -282,7 +313,7 @@ function Login({ onLogin }: { onLogin: (u: User) => void }) {
           <p className="muted">
             A clear view of your day. A better way to care.
           </p>
-          <button
+          {runtime?.demo_enabled && <><button
             className="button primary demo-login"
             disabled={busy}
             onClick={() => login(demo)}
@@ -296,7 +327,9 @@ function Login({ onLogin }: { onLogin: (u: User) => void }) {
           </button>
           <div className="login-divider">
             <span>or sign in to your account</span>
-          </div>
+          </div></>}
+          {runtime?.mode === "pilot" && <p className="demo-notice">Restricted staff pilot. Use synthetic information only. Authenticator verification is required.</p>}
+          {runtimeError && <p className="muted" role="status">Environment details could not be loaded. Sign in with your existing account.</p>}
           <form onSubmit={submit}>
             <label>
               Email address
@@ -327,13 +360,13 @@ function Login({ onLogin }: { onLogin: (u: User) => void }) {
               <ArrowRight size={16} />
             </button>
           </form>
-          <button
+          {runtime?.public_signup_enabled && <button
             className="button secondary login-submit"
             onClick={() => setSignup(true)}
           >
             Create practice account
-          </button>
-          <button
+          </button>}
+          {runtime?.demo_enabled && <><button
             className="text-button reception-login"
             disabled={busy}
             onClick={() => login({ ...demo, email: "frontdesk@cevrali.demo" })}
@@ -350,7 +383,8 @@ function Login({ onLogin }: { onLogin: (u: User) => void }) {
                 to explore clinical and front desk workflows.
               </span>
             </p>
-          </div>
+          </div></>}
+          </>}
         </div>
         <p className="login-footer">CEVRALI EHR · DEVELOPMENT WORKSPACE</p>
       </main>
@@ -381,6 +415,7 @@ export default function App() {
 }
 
 function WorkspaceApp() {
+  const { runtime, runtimeError } = useRuntimeInfo();
   const [user, setUser] = useState<User | null>(null);
   const [workspaceSettings, setWorkspaceSettings] = useState<WorkspaceSettings>(defaultWorkspaceSettings);
   const [authLoading, setAuthLoading] = useState(true);
@@ -764,6 +799,8 @@ function WorkspaceApp() {
   if (!user)
     return (
       <Login
+        runtime={runtime}
+        runtimeError={runtimeError}
         onLogin={(u) => {
           setError("");
           sessionUser(u);
@@ -976,6 +1013,8 @@ function WorkspaceApp() {
               <span />
               {isStandalonePreview
                 ? "Offline preview"
+                : runtime?.mode === "pilot"
+                  ? "Staff pilot"
                 : user.practice?.is_demo === false
                   ? "Practice account"
                   : "Demo workspace"}
@@ -1008,6 +1047,12 @@ function WorkspaceApp() {
           </div>
         </header>
         <main className="main-content" aria-busy={loading || actionBusy}>
+          {!runtime?.clinical_use_allowed && <div className="access-environment-notice" role="note">
+            <ShieldCheck size={18} />
+            <span>{runtime?.mode === "pilot"
+              ? "Staff pilot — synthetic patient data only. Clinical use is disabled."
+              : "Development workspace — synthetic patient data only. Clinical use is disabled."}</span>
+          </div>}
           {user.is_admin &&
             user.practice?.is_demo === false &&
             !user.practice.setup_completed_at &&

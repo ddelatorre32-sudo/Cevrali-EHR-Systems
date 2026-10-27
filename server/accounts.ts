@@ -6,11 +6,13 @@ import {
   scryptSync,
   timingSafeEqual,
 } from 'node:crypto';
-import { mkdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { Express, Response } from 'express';
 import { z } from 'zod';
 import { createDatabase, hashPassword } from './database.js';
+import { beginAuthentication, initializeAccessSecurity, revokeAccessSecurityChallenges } from './access-security.js';
+import type { RuntimeConfig } from './runtime-config.js';
 import {
   accountError,
   accountPassword,
@@ -23,7 +25,7 @@ import {
 } from './account-model.js';
 
 type Row = Record<string, any>;
-export type AccountContext = { store: AccountStore; practiceId: string };
+export type AccountContext = { store: AccountStore; practiceId: string; runtime?: RuntimeConfig; authKey?: Uint8Array };
 export const tokenHash = (token: string) =>
   createHash('sha256').update(token).digest('hex');
 export const sessionCookie = (headers: string | undefined) =>
@@ -72,19 +74,32 @@ export function startSession(
   user: Row,
   res: Response,
   account?: AccountContext,
+  options: { mfaVerified?: boolean } = {},
 ) {
   const token = randomBytes(32).toString('hex');
   const hash = tokenHash(token);
   const expires = Date.now() + 8 * 3600000;
   db.prepare('DELETE FROM sessions WHERE expires<?').run(Date.now());
   db.prepare('INSERT INTO sessions VALUES (?,?,?)').run(hash, user.id, expires);
+  db.exec('CREATE TABLE IF NOT EXISTS mfa_sessions(token TEXT PRIMARY KEY REFERENCES sessions(token) ON DELETE CASCADE, verified_at TEXT NOT NULL)');
+  if (options.mfaVerified)
+    db.prepare('INSERT INTO mfa_sessions VALUES (?,?)').run(hash, new Date().toISOString());
   if (account)
     account.store.indexSession(hash, account.practiceId, user.id, expires);
   res.cookie('cevrali_session', token, {
     ...cookieOptions(),
+    secure: account?.runtime?.secureCookies ?? cookieOptions().secure,
     maxAge: 8 * 3600000,
   });
   return publicUser(user, account);
+}
+export function authenticateOrChallenge(db: DatabaseSync, user: Row, res: Response, account?: AccountContext) {
+  initializeAccessSecurity(db);
+  const result = beginAuthentication(db, { id: String(user.id) }, {
+    requireMfa: Boolean(account?.runtime?.requireMfa), key: account?.authKey,
+    practiceName: account?.store.practice(account.practiceId).name || 'Cevrali',
+  });
+  return result.kind === 'authenticated' ? startSession(db, result.user, res, account) : result;
 }
 export class AccountStore {
   readonly registry: DatabaseSync;
@@ -92,6 +107,7 @@ export class AccountStore {
   constructor(
     readonly directory: string,
     readonly demoDb: DatabaseSync,
+    readonly options: { demoEnabled?: boolean; initializeDatabase?: (db: DatabaseSync) => void } = {},
   ) {
     mkdirSync(directory, { recursive: true });
     this.registry = new DatabaseSync(resolve(directory, 'accounts.sqlite'));
@@ -102,7 +118,13 @@ export class AccountStore {
       CREATE TABLE IF NOT EXISTS invitations(id TEXT PRIMARY KEY,practice_id TEXT NOT NULL REFERENCES practices(id),email TEXT NOT NULL,role TEXT NOT NULL,is_admin INTEGER NOT NULL,token_hash TEXT NOT NULL UNIQUE,status TEXT NOT NULL,created_at TEXT NOT NULL,expires_at TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS public_links(hash TEXT PRIMARY KEY,practice_id TEXT NOT NULL REFERENCES practices(id),expires TEXT NOT NULL);
     `);
+    if (options.demoEnabled === false) {
+      if (this.registry.prepare("SELECT id FROM practices WHERE id='demo-practice'").get())
+        accountError(500, 'Use a separate empty pilot data directory; this registry contains the demo practice.');
+      return;
+    }
     this.databases.set('demo-practice', demoDb);
+    options.initializeDatabase?.(demoDb);
     const owner = demoDb
       .prepare('SELECT id FROM users WHERE is_admin=1 ORDER BY id LIMIT 1')
       .get() as Row | undefined;
@@ -156,9 +178,14 @@ export class AccountStore {
     this.practice(id);
     if (!/^practice-[a-f0-9-]{36}$/.test(id))
       accountError(500, 'Invalid practice identifier');
-    db = createDatabase(resolve(this.directory, `${id}.sqlite`), {
+    const path = resolve(this.directory, `${id}.sqlite`);
+    if (this.options.demoEnabled === false && !existsSync(path))
+      accountError(503, 'A registered practice database is missing. Keep the service offline and investigate recovery.');
+    db = createDatabase(path, {
       seedDemo: false,
     });
+    try { this.options.initializeDatabase?.(db); }
+    catch (error) { db.close(); throw error; }
     this.databases.set(id, db);
     return db;
   }
@@ -209,6 +236,7 @@ export class AccountStore {
     )?.practice_id as string | undefined;
   }
   revokeSessions(practiceId: string, userId: string) {
+    revokeAccessSecurityChallenges(this.db(practiceId), userId);
     this.db(practiceId)
       .prepare('DELETE FROM sessions WHERE user_id=?')
       .run(userId);
@@ -256,6 +284,7 @@ export class AccountStore {
       db = createDatabase(resolve(this.directory, `${id}.sqlite`), {
         seedDemo: false,
       });
+      this.options.initializeDatabase?.(db);
       db.prepare(
         'INSERT INTO users(id,name,email,password,role,is_admin,is_active) VALUES(?,?,?,?,?,1,1)',
       ).run(
@@ -572,6 +601,6 @@ export function registerAccountRoutes(
     );
     store.revokeSessions(practiceId, user.id);
     store.audit(practiceId, user.id, 'Changed account password', user.id);
-    res.json(startSession(db, user, res, account));
+    res.json(startSession(db, user, res, account, { mfaVerified: Boolean(res.locals.mfa_verified) }));
   });
 }

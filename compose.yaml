@@ -9,6 +9,7 @@ services:
     stop_grace_period: 30s
     environment:
       NODE_ENV: production
+      CEVRALI_MODE: demo
       PORT: "8080"
       COOKIE_SECURE: "false"
       DATABASE_PATH: /var/lib/cevrali/cevrali.sqlite

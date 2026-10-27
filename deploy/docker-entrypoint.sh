@@ -7,6 +7,10 @@ DATABASE_PATH="${DATABASE_PATH:-/var/lib/cevrali/cevrali.sqlite}"
 ACCOUNTS_PATH="${ACCOUNTS_PATH:-/var/lib/cevrali/accounts}"
 export DATABASE_PATH ACCOUNTS_PATH
 
+if [ "${CEVRALI_MODE:-demo}" != "demo" ]; then
+  umask 077
+fi
+
 node --input-type=module -e '
 import { resolve, sep } from "node:path";
 const root = resolve("/var/lib/cevrali") + sep;

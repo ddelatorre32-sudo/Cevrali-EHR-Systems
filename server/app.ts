@@ -39,10 +39,14 @@ import { generateRfaPdf } from "./rfa-pdf.js";
 import type { RfaPacket } from "./rfa-engine.js";
 import {
   publicUser,
-  startSession,
+  authenticateOrChallenge,
   registerAccountRoutes,
   type AccountContext,
 } from "./accounts.js";
+import { initializeAccessSecurity } from "./access-security.js";
+import { registerPublicAccessRoutes, registerAccountAccessRoutes } from "./access-routes.js";
+import { loadRuntimeConfig } from "./runtime-config.js";
+import { readinessReport } from "./readiness.js";
 import {
   registerPublicIntake,
   registerWorkflowRoutes,
@@ -127,6 +131,11 @@ function fail(status: number, message: string): never {
 const idParam = (req: Request) => String(req.params.id);
 
 export function createApp(db: DatabaseSync, account?: AccountContext) {
+  const runtime = account?.runtime || loadRuntimeConfig();
+  if (!runtime.demoEnabled && !account)
+    throw new Error('Protected workspaces require a configured practice account context.');
+  initializeAccessSecurity(db);
+  db.exec('CREATE TABLE IF NOT EXISTS mfa_sessions(token TEXT PRIMARY KEY REFERENCES sessions(token) ON DELETE CASCADE, verified_at TEXT NOT NULL)');
   const app = express();
   const billingState = (user: User) => {
     const state = loadWorkflow(db);
@@ -189,12 +198,12 @@ export function createApp(db: DatabaseSync, account?: AccountContext) {
   const cookieOptions = {
     httpOnly: true,
     sameSite: "strict" as const,
-    secure: process.env.COOKIE_SECURE === "true",
+    secure: runtime.secureCookies,
     path: "/",
   };
   app.get("/api/health", (_req, res) => {
     db.prepare("SELECT 1").get();
-    res.json({ status: "ok", mode: "synthetic-demo" });
+    res.json({ status: "ok", mode: runtime.demoEnabled ? "synthetic-demo" : "synthetic-staff-pilot" });
   });
   // A shared proxy address must not let one account's mistakes lock out every
   // other account. Keep a larger address-wide limit for repeated account cycling.
@@ -230,7 +239,7 @@ export function createApp(db: DatabaseSync, account?: AccountContext) {
     const actual = scryptSync(input.password, salt, 64);
     if (
       !user ||
-      !expected ||
+      !expected || !/^[a-f0-9]{128}$/.test(expected) ||
       !timingSafeEqual(actual, Buffer.from(expected, "hex"))
     ) {
       attempts.set(key, {
@@ -247,10 +256,11 @@ export function createApp(db: DatabaseSync, account?: AccountContext) {
       fail(401, "Email or password is incorrect");
     }
     attempts.delete(key);
-    const signedIn = startSession(db, user, res, account);
-    audit(user as User, "Signed in", "workspace");
+    const signedIn = authenticateOrChallenge(db, user, res, account);
+    audit(user as User, 'kind' in signedIn ? "Verified password; awaiting staff MFA" : "Signed in", "workspace");
     res.json(signedIn);
   });
+  registerPublicAccessRoutes(app, db, account, runtime, account?.authKey);
   registerPublicIntake(app, db, account ? () => account.store.practice(account.practiceId) : undefined);
   app.use("/api", (req, res, next) => {
     const token = (req.headers.cookie || "")
@@ -274,6 +284,11 @@ export function createApp(db: DatabaseSync, account?: AccountContext) {
           { status: 401 },
         ),
       );
+    const mfaVerified = Boolean(db.prepare('SELECT 1 FROM mfa_sessions WHERE token=?').get(sessionHash(token)));
+    const mfaEnrolled = Boolean(db.prepare('SELECT 1 FROM access_mfa WHERE user_id=?').get(user.id));
+    const mfaRequired = runtime.requireMfa || mfaEnrolled;
+    if ((runtime.requireMfa && !mfaEnrolled) || (mfaRequired && !mfaVerified))
+      return next(Object.assign(new Error('Complete multi-factor authentication to sign in.'), { status: 401 }));
     if (
       (req.get("X-Cevrali-User") !== undefined &&
         req.get("X-Cevrali-User") !== user.id) ||
@@ -289,12 +304,18 @@ export function createApp(db: DatabaseSync, account?: AccountContext) {
         ),
       );
     res.locals.user = user;
+    res.locals.mfa_verified = mfaVerified;
     res.locals.prescribing_session_id = sessionHash(token);
     if (account)
       res.locals.practice = account.store.practice(account.practiceId);
     next();
   });
   if (account) registerAccountRoutes(app, db, account);
+  registerAccountAccessRoutes(app, db, account, runtime, account?.authKey);
+  app.get('/api/admin/readiness', (_req, res) => {
+    if (!res.locals.user.is_admin) fail(403, 'Practice administrator access required');
+    res.json(readinessReport(runtime));
+  });
   app.get("/api/rfa/:id/pdf", requireClinical, async (req, res) => {
     const { state, ctx } = billingState(res.locals.user);
     const packet = financeRequest(

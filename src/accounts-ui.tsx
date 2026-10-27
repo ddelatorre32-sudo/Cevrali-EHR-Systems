@@ -5,6 +5,7 @@ import { api, isStandalonePreview, patch, post } from "./api";
 import { Modal } from "./components";
 import { useResource } from "./workflow-ui";
 import type { User } from "./types";
+import { MfaAuthentication, SecurityMfaSettings, type MfaPending } from "./access-security-ui";
 import {
   profileComplete,
   type AccountView,
@@ -262,6 +263,7 @@ export function StaffJoin({
   } | null>(`/accounts/invitations/${token}`, null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [challenge, setChallenge] = useState<MfaPending | null>(null);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
@@ -269,12 +271,12 @@ export function StaffJoin({
     try {
       matchingPassword(values);
       setBusy(true);
-      onJoined(
-        await post<User>(`/accounts/invitations/${token}/accept`, {
+      const result = await post<User | MfaPending>(`/accounts/invitations/${token}/accept`, {
           name: values.name,
           password: values.password,
-        }),
-      );
+        });
+      if ("kind" in result && result.kind === "mfa") setChallenge(result);
+      else onJoined(result as User);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -284,6 +286,8 @@ export function StaffJoin({
   return (
     <main className="join-layout">
       <section className="panel join-card">
+        {challenge ? <MfaAuthentication key={challenge.challenge_token} challenge={challenge}
+          onAuthenticated={onJoined} onCancel={() => { location.hash = "overview"; }} /> : <>
         <p className="eyebrow">CEVRALI · TEAM INVITATION</p>
         <h1>Join your practice</h1>
         <PreviewNote />
@@ -320,6 +324,7 @@ export function StaffJoin({
         <a className="text-button" href="#overview">
           Return to sign in
         </a>
+        </>}
       </section>
     </main>
   );
@@ -777,7 +782,7 @@ export function AccountPage({
             <p className="muted">Ask your practice administrator to manage staff access.</p>
           )}
           {activeTab === "Security" && (
-            <section className="panel account-panel">
+            <><section className="panel account-panel">
               <h2>Change your password</h2>
               <p className="muted">
                 Signed in as {user.email}. Changing your password signs out your
@@ -800,6 +805,7 @@ export function AccountPage({
                 </button>
               </form>
             </section>
+            <SecurityMfaSettings user={user} onUserChanged={onUserChanged} /></>
           )}
         </>
       )}

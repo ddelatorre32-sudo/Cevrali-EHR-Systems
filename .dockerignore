@@ -31,3 +31,6 @@ coverage
 **/.agents
 **/*.pem
 **/*.key
+**/.secrets
+**/backups
+**/*.cevrali-backup
