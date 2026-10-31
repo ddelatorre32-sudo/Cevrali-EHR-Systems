@@ -678,30 +678,37 @@ export function createApp(db: DatabaseSync, account?: AccountContext) {
       (a.billing_account_id || `pba-private-${a.patient_id}`)
     )
       fail(409, "Visit billing account changed; reload before saving");
-    const { state } = billingState(res.locals.user);
-    const selected = patientAccount(
-      state.finance,
-      a.patient_id,
-      input.billing_account_id,
-      true,
-    );
-    releaseVisitPlanForAccountChange(
-      state,
-      workflowContext(db, res.locals.user),
-      a.id,
-      selected.id,
-    );
-    db.prepare("UPDATE appointments SET billing_account_id=? WHERE id=?").run(
-      selected.id,
-      a.id,
-    );
-    saveWorkflow(db, state);
-    audit(
-      res.locals.user,
-      `Changed scheduled visit billing account to ${selected.name}`,
-      a.id,
-    );
-    res.json({ ok: true });
+    db.exec("BEGIN IMMEDIATE");
+    try {
+      const { state } = billingState(res.locals.user);
+      const selected = patientAccount(
+        state.finance,
+        a.patient_id,
+        input.billing_account_id,
+        true,
+      );
+      releaseVisitPlanForAccountChange(
+        state,
+        workflowContext(db, res.locals.user),
+        a.id,
+        selected.id,
+      );
+      db.prepare("UPDATE appointments SET billing_account_id=? WHERE id=?").run(
+        selected.id,
+        a.id,
+      );
+      saveWorkflow(db, state);
+      audit(
+        res.locals.user,
+        `Changed scheduled visit billing account to ${selected.name}`,
+        a.id,
+      );
+      db.exec("COMMIT");
+      res.json({ ok: true });
+    } catch (error) {
+      db.exec("ROLLBACK");
+      throw error;
+    }
   });
   app.patch("/api/appointments/:id", (req, res) => {
     const { status } = z
@@ -737,13 +744,20 @@ export function createApp(db: DatabaseSync, account?: AccountContext) {
       res.locals.user.role !== "clinician"
     )
       fail(403, "Clinical access required");
-    syncAppointmentWorkflow(db, a, status);
-    db.prepare("UPDATE appointments SET status = ? WHERE id = ?").run(
-      status,
-      a.id,
-    );
-    audit(res.locals.user, `Appointment: ${status}`, a.id);
-    res.json({ ok: true });
+    db.exec("BEGIN IMMEDIATE");
+    try {
+      syncAppointmentWorkflow(db, a, status);
+      db.prepare("UPDATE appointments SET status = ? WHERE id = ?").run(
+        status,
+        a.id,
+      );
+      audit(res.locals.user, `Appointment: ${status}`, a.id);
+      db.exec("COMMIT");
+      res.json({ ok: true });
+    } catch (error) {
+      db.exec("ROLLBACK");
+      throw error;
+    }
   });
   app.get("/api/encounters", requireClinical, (_req, res) => {
     audit(res.locals.user, "Viewed encounter records", "encounters");
@@ -791,37 +805,44 @@ export function createApp(db: DatabaseSync, account?: AccountContext) {
         .get(input.appointment_id);
       if (existing) return res.json(existing);
     }
-    const id = `enc-${randomUUID().slice(0, 8)}`;
-    const { state, ctx } = billingState(res.locals.user);
-    const selected = patientAccount(
-      state.finance,
-      input.patient_id,
-      scheduledAccount || input.billing_account_id,
-      true,
-    );
-    const fields = encounterAccountFields(
-      state.finance,
-      ctx,
-      { id, patient_id: input.patient_id, billing_account_id: selected.id },
-      { billing_account_id: selected.id, status: "Draft" },
-    );
-    db.prepare(
-      "INSERT INTO encounters (id, patient_id, appointment_id, author_id, chief_complaint,billing_account_id,billing_account_snapshot,wc_documentation) VALUES (?, ?, ?, ?, ?,?,?,?)",
-    ).run(
-      id,
-      input.patient_id,
-      input.appointment_id || null,
-      res.locals.user.id,
-      input.chief_complaint,
-      fields.billing_account_id,
-      JSON.stringify(fields.billing_account_snapshot),
-      JSON.stringify(fields.wc_documentation),
-    );
-    ctx.encounters = db.prepare("SELECT * FROM encounters").all();
-    syncDocumentResults(state, ctx);
-    saveWorkflow(db, state);
-    audit(res.locals.user, "Created encounter", id);
-    res.status(201).json({ id });
+    db.exec("BEGIN IMMEDIATE");
+    try {
+      const id = `enc-${randomUUID().slice(0, 8)}`;
+      const { state, ctx } = billingState(res.locals.user);
+      const selected = patientAccount(
+        state.finance,
+        input.patient_id,
+        scheduledAccount || input.billing_account_id,
+        true,
+      );
+      const fields = encounterAccountFields(
+        state.finance,
+        ctx,
+        { id, patient_id: input.patient_id, billing_account_id: selected.id },
+        { billing_account_id: selected.id, status: "Draft" },
+      );
+      db.prepare(
+        "INSERT INTO encounters (id, patient_id, appointment_id, author_id, chief_complaint,billing_account_id,billing_account_snapshot,wc_documentation) VALUES (?, ?, ?, ?, ?,?,?,?)",
+      ).run(
+        id,
+        input.patient_id,
+        input.appointment_id || null,
+        res.locals.user.id,
+        input.chief_complaint,
+        fields.billing_account_id,
+        JSON.stringify(fields.billing_account_snapshot),
+        JSON.stringify(fields.wc_documentation),
+      );
+      ctx.encounters = db.prepare("SELECT * FROM encounters").all();
+      syncDocumentResults(state, ctx);
+      saveWorkflow(db, state);
+      audit(res.locals.user, "Created encounter", id);
+      db.exec("COMMIT");
+      res.status(201).json({ id });
+    } catch (error) {
+      db.exec("ROLLBACK");
+      throw error;
+    }
   });
   app.patch("/api/encounters/:id", requireClinical, (req, res) => {
     const input = encounterFields

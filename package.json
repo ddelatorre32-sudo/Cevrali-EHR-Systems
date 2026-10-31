@@ -22,7 +22,8 @@
     "bootstrap:practice": "node scripts/bootstrap-practice.mjs",
     "backup": "node scripts/backup.mjs",
     "restore": "node scripts/restore.mjs",
-    "audit:verify": "node scripts/audit-verify.mjs"
+    "audit:verify": "node scripts/audit-verify.mjs",
+    "deployment:check": "node scripts/deployment-check.mjs"
   },
   "dependencies": {
     "@fontsource/dm-sans": "^5.3.0",

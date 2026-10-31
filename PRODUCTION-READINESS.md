@@ -2,6 +2,8 @@
 
 This build supports a synthetic demo and a restricted staff pilot. **It is not approved for real patient information or clinical care.** `CEVRALI_MODE=production` refuses startup even if an operator supplies completed release attestations: live clinical transports and a reviewed clinical release are not implemented. Configuration checks do not certify HIPAA compliance, clinical safety, or EPCS certification.
 
+For the requested full clinical launch, [LIVE-SERVICES-SETUP.md](LIVE-SERVICES-SETUP.md) records the missing service connections. Hosting and reviews have been reported ready; the deployed HTTPS address and approval references still need verification. No live service providers are arranged. Use [DEPLOYMENT-VERIFICATION.md](DEPLOYMENT-VERIFICATION.md) to inspect the actual site once its address is supplied.
+
 ## Controls in this release
 
 - `demo` keeps the existing synthetic practice and published demonstration accounts. It remains the default for local development and demo hosting.
